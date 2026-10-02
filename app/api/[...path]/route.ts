@@ -63,5 +63,42 @@ throw new AppError('Unknown authentication action.');}
  if(path==='user'){requireRole(u,['ADMIN']);const old=b.id?await one('SELECT * FROM users WHERE id=?',b.id):null;if(b.id&&!old)throw new AppError('Account not found.');if(old?.role==='STUDENT'&&b.role!=='STUDENT'&&await one('SELECT id FROM attendance WHERE user_id=? LIMIT 1',old.id))throw new AppError('A student with attendance history must keep their student role. Create a separate faculty account.');if(!['ADMIN','FACULTY','STUDENT'].includes(b.role))throw new AppError('Invalid role.');if(old?.id===actual.id&&(!b.active||b.role!=='ADMIN'))throw new AppError('You cannot remove your own administrator access.');let email=required(b.email,'Email',200).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new AppError('Enter a valid email address.');const data={name:required(b.name,'Name',150),email,role:b.role,active:b.active?1:0,department:required(b.department,'Department',100),batch:required(b.batch,'Batch',100),year:Math.round(num(b.year,1,2,'NSS year')),nss_id:b.role==='STUDENT'?required(b.nss_id,'NSS ID',100):(b.nss_id?String(b.nss_id).slice(0,100):null),roll:String(b.roll||'').slice(0,100)};const uid=old?.id||id(),reason=required(b.reason,'Change reason');await db().batch([old?sql(`UPDATE users SET ${Object.keys(data).map(k=>k+'=?').join(',')} WHERE id=?`,...Object.values(data),uid):insert('users',{id:uid,...data,created_at:now()}),audit(u,old?'Account updated':'Account created','users',uid,old?safeUser(old):null,data,reason),...(old?[sql('DELETE FROM sessions WHERE user_id=?',uid)]:[])]);return respond({id:uid,message:'Account saved. Issue a recovery link to let the account holder set their password.'});}
  if(path==='recovery'){requireRole(u,['ADMIN']);const target=await one('SELECT * FROM users WHERE id=?',b.user);if(!target)throw new AppError('Account not found.');const token=id()+id();await db().batch([sql("UPDATE resets SET status='REVOKED',token=NULL WHERE user_id=? AND status IN ('REQUESTED','ISSUED')",target.id),insert('resets',{id:id(),user_id:target.id,token:await digest(token),expires:new Date(Date.now()+3600000).toISOString(),status:'ISSUED',created_at:now()}),audit(u,'Recovery link issued','users',target.id,null,{},'Administrator verified recovery')]);return respond({message:'One-time link created. Share it securely with the verified account holder. It expires in one hour.',token});}
  if(path==='import'){requireRole(u,['ADMIN']);if(!Array.isArray(b.rows)||b.rows.length<1||b.rows.length>200)throw new AppError('Import 1–200 students at a time.');let q=[];for(const x of b.rows){let email=required(x.email,'Email',200).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new AppError('Invalid email: '+email);const uid=id();q.push(insert('users',{id:uid,email,name:required(x.name,'Name',150),role:'STUDENT',department:required(x.department,'Department',100),batch:required(x.batch,'Batch',100),year:Math.round(num(x.year||1,1,2,'Year')),nss_id:required(x.nss_id,'NSS ID',100),roll:required(x.roll,'Roll',100),created_at:now()}));}q.push(audit(u,'Students imported','users','batch',null,{count:b.rows.length},'CSV import'));await db().batch(q);return respond({message:`${b.rows.length} students imported.`});}
+ if (path === 'delete-batch') {
+  requireRole(u, ['ADMIN']);
+
+  const batchId = required(b.id, 'Batch ID', 100);
+  const reason = required(b.reason, 'Deletion reason', 1000);
+
+  const batch = await one(
+    "SELECT * FROM catalogs WHERE id=? AND kind='batch'",
+    batchId
+  );
+
+  if (!batch) {
+    throw new AppError('Batch not found. Refresh and try again.', 404);
+  }
+
+  await db().batch([
+    sql(
+      `INSERT INTO audit_logs
+       (id, actor, role, action, entity, entity_id,
+        old_value, new_value, reason, created_at)
+       SELECT ?, ?, ?, 'Batch deleted', 'catalogs', id,
+              json_object('id', id, 'kind', kind, 'name', name),
+              'null', ?, ?
+       FROM catalogs WHERE id=? AND kind='batch'`,
+      id(), u.id, u.role, reason, now(), batchId
+    ),
+    sql(
+      "DELETE FROM catalogs WHERE id=? AND kind='batch'",
+      batchId
+    )
+  ]);
+
+  return respond({
+    ok: true,
+    message: 'Batch removed. Existing student records are preserved.'
+  });
+}
  if(path==='catalog'){requireRole(u,['ADMIN']);if(!['department','batch','category','academic_year'].includes(b.kind))throw new AppError('Invalid catalog.');await db().batch([insert('catalogs',{id:id(),kind:b.kind,name:required(b.name,'Name',120),details:'{}'}),audit(u,'Catalog entry added','catalogs',b.kind,null,{name:b.name},'Administrator configuration')]);return respond({message:'Entry added.'});}
  throw new AppError('Unknown action.');}catch(e){return fail(e)}}
