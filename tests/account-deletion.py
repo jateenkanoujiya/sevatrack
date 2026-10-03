@@ -1,5 +1,5 @@
 """In-memory integration tests. Never connects to Turso or deletes real photos."""
-import sqlite3, unittest
+import sqlite3, unittest, json
 from pathlib import Path
 
 class Deletion(unittest.TestCase):
@@ -13,8 +13,10 @@ class Deletion(unittest.TestCase):
   self.db.execute("INSERT INTO events(id,title,category,description,start,end,deadline,hours,location,lat,lng,radius,capacity,coordinator,status,created_at) VALUES('event','Test','Service','Test','2026-01-01','2026-01-02','2026-01-01',4,'Campus',19,72,250,10,'other','Ongoing','2026-01-01')")
   for uid in ['student','peer']:
    self.db.execute("INSERT INTO attendance(id,event_id,user_id,year,status,original_in,effective_in,created_at) VALUES(?,'event',?,1,'CHECKED_IN','original','original','2026-01-01')",(uid,uid))
-   self.db.execute("INSERT INTO evidence VALUES(?,?,?,'image/png','{}',NULL,'PENDING','','2026-01-01')",(uid,uid,'evidence/'+uid+'/photo'))
+   self.db.execute("INSERT INTO evidence VALUES(?,?,?,'image/png','{}',NULL,'APPROVED','','2026-01-01')",(uid,uid,'evidence/'+uid+'/photo'))
    self.db.execute("INSERT INTO adjustments VALUES(?,?,'other','{}','{}','Verified','2026-01-01')",(uid,uid))
+   loc=json.dumps(dict(lat=19,lng=72,accuracy=8,inside=True,status='Location verified'))
+   self.db.execute("UPDATE attendance SET original_out='original-out',effective_out='original-out',location_in=?,location_out=?,status='APPROVED' WHERE id=?",(loc,loc,uid))
    self.db.execute("INSERT INTO hour_ledger VALUES(?,?,?,1,4,'Verified','other',0,'2026-01-01')",(uid,uid,uid))
    self.db.execute("INSERT INTO corrections VALUES(?,?,'Time','Please review','PENDING','','2026-01-01')",(uid,uid))
    for entity in ['users','attendance','evidence']:

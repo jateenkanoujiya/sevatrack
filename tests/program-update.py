@@ -1,5 +1,5 @@
 """Production migration regression tests using disposable SQLite only."""
-import sqlite3, unittest
+import sqlite3, unittest, json
 from pathlib import Path
 class ProgramUpdate(unittest.TestCase):
  def setUp(self):
@@ -61,7 +61,10 @@ class ProgramUpdate(unittest.TestCase):
   self.credit()
   self.db.execute("INSERT INTO events(id,title,category,description,start,end,deadline,hours,location,lat,lng,radius,capacity,coordinator,status,created_at) VALUES('e','Live event','Service','Activity','2026-10-01','2026-10-02','2026-09-30',4,'Campus',19,72,100,20,'faculty','Completed',?)",(self.clock,))
   self.db.execute("INSERT INTO attendance(id,event_id,user_id,year,status,original_in,original_out,effective_in,effective_out,created_at) VALUES('a','e','student',1,'APPROVED','2026-10-01T10:00:00Z','2026-10-01T14:00:00Z','2026-10-01T10:00:00Z','2026-10-01T14:00:00Z',?)",(self.clock,))
-  self.db.execute("INSERT INTO hour_ledger VALUES('l','a','student',1,4,'Verified','faculty',0,?)",(self.clock,))
+  loc=json.dumps(dict(lat=19,lng=72,accuracy=8,inside=True,status='Location verified'))
+  self.db.execute('UPDATE attendance SET location_in=?,location_out=?',(loc,loc))
+  self.db.execute("INSERT INTO evidence VALUES('proof','a','proof','image/png','{}',NULL,'APPROVED','','2026-10-03')")
+  self.db.execute("INSERT INTO hour_ledger VALUES('l','a','student',1,4,'Verified','admin',0,?)",(self.clock,))
   self.assertEqual(self.db.execute("SELECT SUM(delta) FROM service_credits WHERE user_id='student'").fetchone()[0],16)
   self.credit(-2,10,2)
   self.assertEqual(self.db.execute("SELECT SUM(delta) FROM service_credits WHERE user_id='student'").fetchone()[0],14)
