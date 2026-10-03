@@ -1,7 +1,7 @@
 import {get,del} from '@vercel/blob';
 import {one,sql,insert,db,id,now,audit} from './db';
 import {AppError,boundedBody} from './errors';
-import {geo} from './domain';
+import {photoMetadata} from './photo-metadata';
 import {validateImage} from './uploads';
 const MAX=5*1024*1024;
 export async function photoAttendance(u:any,aid:string){
@@ -16,7 +16,7 @@ export async function preparePhoto(u:any,b:any){
  if((await one('SELECT COUNT(*) n FROM evidence WHERE attendance_id=?',a.id)).n>=10)throw new AppError('This activity already has 10 photos. Contact your coordinator.');
  if((await one('SELECT COUNT(*) n FROM upload_intents WHERE user_id=? AND expires>?',u.id,now())).n>=15)throw new AppError('Too many unfinished uploads. Please wait 15 minutes and try again.',429);
  const pid=id(),path=`evidence/${a.user_id}/${pid}`;
- await insert('upload_intents',{id:pid,user_id:u.id,attendance_id:a.id,path,mime:b.mime,size:b.size,location:JSON.stringify(geo(b.location,a)),expires:new Date(Date.now()+900000).toISOString(),created_at:now()}).run();
+ await insert('upload_intents',{id:pid,user_id:u.id,attendance_id:a.id,path,mime:b.mime,size:b.size,location:JSON.stringify(photoMetadata(b,a)),expires:new Date(Date.now()+900000).toISOString(),created_at:now()}).run();
  return {id:pid,path};
 }
 export async function authorizePhoto(u:any,pid:string,path:string){

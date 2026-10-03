@@ -12,7 +12,7 @@ export async function deletionSummary(u:any,targetId:string){
  const counts=await one(`SELECT
  (SELECT COUNT(*) FROM attendance WHERE user_id=?) attendance,
  (SELECT COUNT(*) FROM evidence e JOIN attendance a ON a.id=e.attendance_id WHERE a.user_id=?) photos,
- (SELECT COALESCE(SUM(delta),0) FROM hour_ledger WHERE user_id=?) hours,
+ (SELECT COALESCE(SUM(delta),0) FROM service_credits WHERE user_id=?) hours,
  (SELECT COUNT(*) FROM events WHERE coordinator=?) events`,targetId,targetId,targetId,targetId);
  return {target,counts};
 }
