@@ -33,3 +33,14 @@ body{line-height:1.55}input,textarea{scroll-margin:80px}button:disabled{cursor:n
 .field input[type=file]{max-width:100%;font-size:13px}
 .login-box>.nss-logo{margin-bottom:24px}
 @media(max-width:767px){.mobile-college-brand{display:flex;align-items:center;gap:8px;margin-bottom:16px}.mobile-college-brand .college-identity{padding:0}.mobile-college-brand .college-identity img{width:32px;height:32px}}
+
+/* Interactive GPS confirmation */
+.attendance-map{height:340px;width:100%;min-width:0;border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative;z-index:0;background:#e8eeeb}
+.gps-workspace{min-width:0}.gps-workspace .detail-item strong{overflow-wrap:anywhere}
+.gps-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px}
+.gps-legend span:first-child{color:#16835e}.gps-legend span:last-child{color:#2563eb}
+.gps-ready{border-left:4px solid #16835e}
+.attendance-map .leaflet-bar a{width:42px;height:42px;line-height:42px}
+.attendance-map .leaflet-control-attribution{font-size:11px;color:#172b25;background:rgba(255,255,255,.94)}
+.attendance-map .leaflet-control-attribution a{color:#075985}
+@media(max-width:480px){.attendance-map{height:280px}.gps-workspace .detail-grid{grid-template-columns:1fr 1fr}}

@@ -1,0 +1,10 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict'),ts=require('typescript');
+class AppError extends Error{constructor(m,status=400){super(m);this.status=status}}
+const code=ts.transpileModule(fs.readFileSync('app/api/[...path]/route.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+function setup(role='ADMIN',exists=true){const writes=[],exports={},u={id:'actor',role,active:1};const db={one:async()=>exists?{id:'entry',kind:'department',name:'Science'}:null,sql:(q,...args)=>({q,args}),db:()=>({batch:async a=>writes.push(...a)}),id:()=> 'audit',now:()=> '2026-10-03'};vm.runInNewContext(code,{exports,require:n=>({'@/lib/db':db,'@/lib/errors':{AppError,boundedBody:async r=>new Uint8Array(await r.arrayBuffer())},'@/lib/auth':{context:async()=>({u,actual:u}),rate:async()=>{}}}[n]||{}),Request,Response,URL,TextDecoder,Date,console});return {writes,call:async(body)=>{const r=await exports.POST(new Request('https://test.invalid/api/delete-catalog',{method:'POST',headers:{origin:'https://test.invalid','content-type':'application/json'},body:JSON.stringify(body)}));return r.status}}}
+(async()=>{let n=0;const body={id:'entry',kind:'department',reason:'No longer offered'};
+for(const role of ['STUDENT','FACULTY']){const s=setup(role);assert.equal(await s.call(body),403);assert.equal(s.writes.length,0);n++}
+for(const patch of [{reason:''},{kind:'users'},{id:''}]){const s=setup();assert.equal(await s.call({...body,...patch}),400);assert.equal(s.writes.length,0);n++}
+{const s=setup('ADMIN',false);assert.equal(await s.call(body),404);assert.equal(s.writes.length,0);n++}
+for(const kind of ['department','academic_year','category']){const s=setup();assert.equal(await s.call({...body,kind}),200);assert.equal(s.writes.length,2);assert(s.writes[0].q.startsWith('INSERT INTO audit_logs'));assert.equal(s.writes[1].q,'DELETE FROM catalogs WHERE id=? AND kind=?');assert.deepEqual(Array.from(s.writes[1].args),['entry',kind]);n++}
+console.log(`${n} directory deletion API checks passed.`)})().catch(e=>{console.error(e);process.exitCode=1});
