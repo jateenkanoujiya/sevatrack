@@ -1,0 +1,26 @@
+[
+  {
+    "name": "001_initial.sql",
+    "checksum": "7a95e5cd8cf5a106a03e32f206f746c767c551b0724ed461da303fa3e8116f94"
+  },
+  {
+    "name": "002_private_uploads.sql",
+    "checksum": "4febc53d2e1ee5d11d22099ffa2d5f8b615fbee2239e39b951e42e529c529774"
+  },
+  {
+    "name": "003_account_deletion.sql",
+    "checksum": "4ddfedb9f89b0b30bf86bbd75b685cd350a96636b286062d994b7f74a1a491cd"
+  },
+  {
+    "name": "004_program_update.sql",
+    "checksum": "3e668557f7b81e5b4f3f9401efe16352d31751f7ea867548b00de489a71ddb0a"
+  },
+  {
+    "name": "005_verified_attendance.sql",
+    "checksum": "4db02105eaf5d9b87bbe4a9570e738d61cd07e80a4e80446d224a52d6750f0b7"
+  },
+  {
+    "name": "006_concurrent_submission_guards.sql",
+    "checksum": "bd9c9b66ab240c610202236e575af9c9e95569fc9a5528989f4cbba11adf773e"
+  }
+]

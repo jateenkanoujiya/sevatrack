@@ -1,7 +1,10 @@
 import {createClient} from '@libsql/client';
+import {collegeConfigs} from '../lib/college-config.mjs';
 import {readFile,readdir} from 'node:fs/promises';
 import {createHash,randomUUID,pbkdf2Sync} from 'node:crypto';
-const {TURSO_DATABASE_URL:url,TURSO_AUTH_TOKEN:authToken}=process.env;
+const colleges=collegeConfigs();
+const targets=colleges.length?colleges:[{id:'default',url:process.env.TURSO_DATABASE_URL,authToken:process.env.TURSO_AUTH_TOKEN}];
+for(const {id:collegeId,url,authToken} of targets){
 if(!url||!authToken)throw new Error('Connect a Turso database to this deployment environment before building SevaTrack.');
 if(process.env.VERCEL_ENV&&process.env.VERCEL_ENV!=='production')throw new Error('Preview migrations require a separate database and a reviewed deployment workflow.');
 const client=createClient({url,authToken,intMode:'number'});
@@ -20,13 +23,16 @@ try{
  await client.execute({sql:'INSERT OR IGNORE INTO settings (id,value) VALUES (?,?)',args:['program',JSON.stringify(settings)]});
  const admin=await client.execute("SELECT id FROM users WHERE role='ADMIN' LIMIT 1");
  if(!admin.rows.length){
-  const email=process.env.SEVATRACK_ADMIN_EMAIL?.trim().toLowerCase(),password=process.env.SEVATRACK_ADMIN_PASSWORD;
+  const prefix=collegeId==='default'?'SEVATRACK':`SEVATRACK_${collegeId.toUpperCase().replaceAll('-','_')}`;
+  const email=process.env[prefix+'_ADMIN_EMAIL']?.trim().toLowerCase(),password=process.env[prefix+'_ADMIN_PASSWORD'];
   if(email&&password){
    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||password.length<16||password.length>128)throw new Error('Initial administrator needs a valid email and a password of 16–128 characters.');
    const salt=randomUUID(),hash=salt+':'+pbkdf2Sync(password,salt,100000,32,'sha256').toString('hex');
-   await client.execute({sql:"INSERT INTO users (id,email,name,role,password,created_at) SELECT ?,?,?,'ADMIN',?,? WHERE NOT EXISTS(SELECT 1 FROM users WHERE role='ADMIN')",args:[randomUUID(),email,process.env.SEVATRACK_ADMIN_NAME||'NSS Administrator',hash,new Date().toISOString()]});
+   await client.execute({sql:"INSERT INTO users (id,email,name,role,password,created_at) SELECT ?,?,?,'ADMIN',?,? WHERE NOT EXISTS(SELECT 1 FROM users WHERE role='ADMIN')",args:[randomUUID(),email,process.env[prefix+'_ADMIN_NAME']||'NSS Administrator',hash,new Date().toISOString()]});
    console.log('Initial administrator created. Remove bootstrap password environment variable after verifying login.');
   }else console.log('Administrator setup pending: add SEVATRACK_ADMIN_EMAIL and SEVATRACK_ADMIN_PASSWORD, then redeploy.');
  }
  console.log('SevaTrack schema ready; no demonstration records installed.');
 }finally{client.close();}
+
+}

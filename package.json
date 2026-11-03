@@ -11,7 +11,14 @@
     "vercel-build": "node scripts/migrate.mjs && next build",
     "start": "next start",
     "lint": "eslint . --ignore-pattern .next",
-    "db:migrate": "node scripts/migrate.mjs"
+    "db:migrate": "node scripts/migrate.mjs",
+    "test": "node scripts/test.mjs",
+    "typecheck": "tsc --noEmit",
+    "db:check": "node scripts/check-database.mjs",
+    "db:backup": "node scripts/backup-database.mjs",
+    "backup:full": "node scripts/backup-with-photos.mjs",
+    "backup:verify": "node scripts/verify-backup.mjs",
+    "backup:restore-photos": "node scripts/restore-photos.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

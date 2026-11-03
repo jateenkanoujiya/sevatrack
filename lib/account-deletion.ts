@@ -1,3 +1,4 @@
+import {blobOptions} from './college';
 import {del,list} from '@vercel/blob';
 import {all,one,sql,id,now} from './db';
 import {passwordHash,constantEqual,rate} from './auth';
@@ -38,10 +39,10 @@ export async function cleanupDeletedPhotos(u:any){
    // account's server-generated prefix is ever accepted, never request paths.
    let empty=false;
    for(let page=0;page<3;page++){
-    const result=await list({prefix:job.prefix,limit:100});
+    const result=await list({prefix:job.prefix,limit:100,...blobOptions()});
     if(!result.blobs.length){empty=true;break;}
     if(result.blobs.some((blob:{pathname:string})=>!blob.pathname.startsWith(job.prefix)))throw new Error('Unexpected photo path');
-    await del(result.blobs.map((blob:{pathname:string})=>blob.pathname));
+    await del(result.blobs.map((blob:{pathname:string})=>blob.pathname),blobOptions());
    }
    if(empty&&Date.parse(job.not_before)<=Date.now()){
     await sql('DELETE FROM deletion_blob_jobs WHERE id=?',job.id).run();completed++;

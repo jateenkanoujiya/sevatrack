@@ -1,0 +1,30 @@
+const {spawnSync}=require('node:child_process'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),assert=require('node:assert/strict');
+const manifest=JSON.parse(fs.readFileSync('database/migration-manifest.json','utf8'));
+for(const migration of manifest)assert.equal(require('node:crypto').createHash('sha256').update(fs.readFileSync('database/migrations/'+migration.name)).digest('hex'),migration.checksum,'Refresh migration manifest after adding a migration');
+assert.equal(manifest.length,fs.readdirSync('database/migrations').filter(n=>n.endsWith('.sql')).length);
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'seva-operations-'));
+const env={...process.env,TURSO_DATABASE_URL:'file:'+path.join(temp,'source.db'),TURSO_AUTH_TOKEN:'test-only',SEVATRACK_ADMIN_EMAIL:'admin@example.test',SEVATRACK_ADMIN_PASSWORD:'Disposable-test-password-2026'};
+delete env.VERCEL_ENV;
+function run(command,args,code=0){const r=spawnSync(command,args,{env,encoding:'utf8'});assert.equal(r.status,code,r.stdout+'\n'+r.stderr);return r.stdout}
+(async()=>{let client;try{
+ run(process.execPath,['scripts/migrate.mjs']);
+ const {createClient}=await import('@libsql/client');client=createClient({url:env.TURSO_DATABASE_URL});
+ await client.execute("INSERT INTO catalogs(id,kind,name,details) VALUES('preserve','department','Persistence check','{}')");
+ run(process.execPath,['scripts/migrate.mjs']);
+ assert.equal((await client.execute("SELECT COUNT(*) n FROM catalogs WHERE id='preserve'")).rows[0].n,1);
+ run(process.execPath,['scripts/check-database.mjs']);
+ const backup=path.join(temp,'snapshot.json'),restored=path.join(temp,'restored.db');
+ run(process.execPath,['scripts/backup-database.mjs',backup]);
+ run(process.execPath,['scripts/backup-database.mjs',backup],1);
+ const python=process.env.PYTHON||(process.platform==='win32'?'python':'python3');
+ run(python,['scripts/restore-backup.py',backup,restored]);
+ run(python,['scripts/restore-backup.py',backup,restored],1);
+ const restore=createClient({url:'file:'+restored});
+ assert.equal((await restore.execute("SELECT COUNT(*) n FROM catalogs WHERE id='preserve'")).rows[0].n,1);
+ assert.equal((await restore.execute("SELECT COUNT(*) n FROM users WHERE role='ADMIN'")).rows[0].n,1);
+ assert.equal((await restore.execute("SELECT COUNT(*) n FROM sqlite_master WHERE type='trigger'")).rows[0].n,(await client.execute("SELECT COUNT(*) n FROM sqlite_master WHERE type='trigger'")).rows[0].n);
+ restore.close();
+ await client.execute("UPDATE seva_migrations SET checksum='tampered' WHERE name=(SELECT MIN(name) FROM seva_migrations)");
+ run(process.execPath,['scripts/check-database.mjs'],1);
+ console.log('Migration persistence, read-only checks, backup/restore, overwrite protection and checksum detection passed.');
+}finally{client?.close();fs.rmSync(temp,{recursive:true,force:true})}})().catch(e=>{console.error(e);process.exitCode=1});

@@ -1,12 +1,15 @@
 import {createClient,type Client,type InValue,type ResultSet} from '@libsql/client';
 import {get} from '@vercel/blob';
-let client:Client|undefined;
+import {currentCollege,blobOptions} from './college';
+const clients=new Map<string,{url:string;authToken:string;client:Client}>();
 export function databaseClient(){
- if(!client){const url=process.env.TURSO_DATABASE_URL,authToken=process.env.TURSO_AUTH_TOKEN;
+ const {id,url,authToken}=currentCollege();
+ let cached=clients.get(id);
+ if(!cached||cached.url!==url||cached.authToken!==authToken){
   if(!url||!authToken)throw new Error('Database configuration missing');
-  client=createClient({url,authToken,intMode:'number'});
+  cached={url,authToken,client:createClient({url,authToken,intMode:'number'})};clients.set(id,cached);
  }
- return client;
+ return cached.client;
 }
 function mapped(result:ResultSet){return {results:result.rows.map(row=>Object.fromEntries(result.columns.map(name=>[name,row[name]]))),meta:{changes:result.rowsAffected}};}
 class Statement {
@@ -22,7 +25,7 @@ const adapter={prepare:(query:string)=>new Statement(query),batch:async(statemen
  return result.map(mapped);
 }};
 export const db=()=>adapter;
-export const bucket=()=>({get:async(path:string)=>{const result=await get(path,{access:'private'});return result?.statusCode===200?{body:result.stream}:null;}});
+export const bucket=()=>({get:async(path:string)=>{const result=await get(path,{access:'private',...blobOptions()});return result?.statusCode===200?{body:result.stream}:null;}});
 export const now=()=>new Date().toISOString();
 export const id=()=>crypto.randomUUID();
 export const sql=(s:string,...v:any[])=>db().prepare(s).bind(...v);
