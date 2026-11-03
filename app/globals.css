@@ -53,3 +53,13 @@ body{line-height:1.55}input,textarea{scroll-margin:80px}button:disabled{cursor:n
 .health-results{display:grid;gap:12px;list-style:none;padding:0;margin:18px 0}.health-results li{display:flex;gap:10px;align-items:flex-start;font-size:14px}.health-results svg{flex-shrink:0;margin-top:2px}
 
 .dark .mobile-bottom a.active{color:#d8f585}.dark .btn.danger{color:#ffbfb5}
+
+/* Archived service records share the existing theme and stay scrollable on phones. */
+.past-events,.past-events .panel,.past-events .field-grid{min-width:0;max-width:100%}
+.past-events p,.past-events h3,.past-events small{overflow-wrap:anywhere}
+.past-events table{min-width:580px;border-collapse:collapse;text-align:left}
+.past-events th,.past-events td{padding:12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.past-events select,.past-events td input[type=number]{min-height:44px;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--card);color:var(--foreground);font:inherit}
+.past-events input[type=checkbox]{width:20px;height:20px;flex-shrink:0;accent-color:var(--foreground)}
+.past-events .btn,.past-events summary{min-height:44px}
+.past-events select:focus-visible,.past-events summary:focus-visible{outline:3px solid #829a37;outline-offset:3px}

@@ -22,7 +22,8 @@ try {
   ['Ledger identity',"SELECT COUNT(*) n FROM hour_ledger l JOIN attendance a ON a.id=l.attendance_id WHERE l.user_id!=a.user_id OR l.year!=a.year",n=>n===0],
   ['Attendance hour balances',"SELECT COUNT(*) n FROM (SELECT a.id,a.status,COALESCE(SUM(l.delta),0) total FROM attendance a LEFT JOIN hour_ledger l ON l.attendance_id=a.id GROUP BY a.id HAVING total < -0.005 OR total > 24.005 OR (a.status NOT IN ('APPROVED','PARTIAL') AND ABS(total)>0.005))",n=>n===0],
   ['Historical hour balances',"SELECT COUNT(*) n FROM historical_hours h WHERE ABS(h.balance-(SELECT SUM(x.delta) FROM historical_hours x WHERE x.user_id=h.user_id AND x.year=h.year AND x.revision<=h.revision))>0.005",n=>n===0],
-  ['Service credit totals',"SELECT ABS((SELECT COALESCE(SUM(delta),0) FROM service_credits)-(SELECT COALESCE(SUM(delta),0) FROM hour_ledger)-(SELECT COALESCE(SUM(delta),0) FROM historical_hours)) n",n=>n<0.005]
+  ['Past event balances',"SELECT COUNT(*) n FROM past_event_hours h WHERE ABS(h.balance-(SELECT SUM(x.delta) FROM past_event_hours x WHERE x.event_id=h.event_id AND x.user_id=h.user_id AND x.revision<=h.revision))>0.005",n=>n===0],
+  ['Service credit totals',"SELECT ABS((SELECT COALESCE(SUM(delta),0) FROM service_credits)-(SELECT COALESCE(SUM(delta),0) FROM hour_ledger)-(SELECT COALESCE(SUM(delta),0) FROM historical_hours)-(SELECT COALESCE(SUM(delta),0) FROM past_event_hours)) n",n=>n<0.005]
  ];
  for(const [label,query,valid] of queries){const result=await tx.execute(query);check(valid(Number(result.rows[0].n)),label)}
  await tx.rollback();tx=null;

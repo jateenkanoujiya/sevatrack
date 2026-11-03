@@ -22,5 +22,9 @@
   {
     "name": "006_concurrent_submission_guards.sql",
     "checksum": "bd9c9b66ab240c610202236e575af9c9e95569fc9a5528989f4cbba11adf773e"
+  },
+  {
+    "name": "007_past_events.sql",
+    "checksum": "bd57ffc191cefa2ce49b90749681633cd1f5b987bca14d3f628371b34d2eab80"
   }
 ]

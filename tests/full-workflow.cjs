@@ -111,14 +111,70 @@ async function main(){
  // Each concurrent request must keep its own college through asynchronous I/O.
  const states=await Promise.all(Array.from({length:20},(_,i)=>call('state',undefined,i%2?admin:bAdmin,200,i%2?'a.example.test':'b.example.test')));
  states.forEach(({data},i)=>assert.equal(data.students.length,i%2?2:0));
+ // Real archived-event requests: separate attestation, immutable ledger and scoped visibility.
+ const archived={title:'Past campus service',category:event.category,description:'Verified service from a signed register',start:new Date(realNow-86400000).toISOString(),end:new Date(realNow-72000000).toISOString(),hours:4,location:'Old campus',coordinator:faculty.id,source:'Signed register page 12',reason:'Import completed service'};
+ await call('past-event',archived,student.cookie,403);
+ await call('past-event',archived,faculty.cookie,403);
+ await call('past-event',{...archived,end:new Date(realNow+86400000).toISOString()},admin,400);
+ await call('past-event',{...archived,source:''},admin,400);
+ const {data:createdPast}=await call('past-event',archived,admin),pastId=createdPast.id;
+ await call('past-event',archived,admin,409);
+ await call('past-event?id='+pastId,undefined,student.cookie,403);
+ await call('past-event?id='+pastId,undefined,outsider.cookie,403);
+ await call('past-event?id='+pastId,undefined,bAdmin,404,'b.example.test');
+ const pastCredit={event:pastId,source:'Signed register page 12',reason:'Approved verified participation',confirmNotCounted:true,rows:[{nss_id:'student',year:2,hours:3,revision:0}]};
+ await call('past-hours',pastCredit,student.cookie,403);
+ await call('past-hours',pastCredit,faculty.cookie,403);
+ for(const patch of [{confirmNotCounted:false},{confirmNotCounted:'true'},{source:''},{reason:''},{rows:[{...pastCredit.rows[0],hours:5}]},{rows:[{...pastCredit.rows[0],year:1.5}]},{rows:[pastCredit.rows[0],pastCredit.rows[0]]},{rows:[pastCredit.rows[0],{nss_id:'missing',year:1,hours:1,revision:0}]}])await call('past-hours',{...pastCredit,...patch},admin,400);
+ assert.equal((await call('past-event?id='+pastId,undefined,admin)).data.participants.length,0);
+ await call('past-hours',pastCredit,admin);
+ await call('past-hours',pastCredit,admin,409);
+ let pastState=(await call('state',undefined,student.cookie)).data;
+ assert.equal(pastState.students[0].y1,1);assert.equal(pastState.students[0].y2,3);assert.equal(pastState.counts.hours,4);assert.equal(pastState.counts.participated_events,2);
+ const unchanged={...pastCredit,rows:[{...pastCredit.rows[0],revision:1}]};
+ await call('past-hours',unchanged,admin);
+ assert.equal((await call('past-event?id='+pastId,undefined,admin)).data.history.length,1);
+ await call('past-hours',{...unchanged,rows:[{...unchanged.rows[0],year:1}]},admin,400);
+ await call('past-hours',{...unchanged,rows:[{...unchanged.rows[0],hours:2}]},admin);
+ const history=(await call('records?kind=history',undefined,student.cookie)).data.rows;
+ assert(history.some(h=>h.source==='past_event'&&h.delta===-1&&h.year===2));
+ assert.equal((await call('past-event?id='+pastId,undefined,student.cookie)).data.participants.length,1);
+ await call('past-export?id='+pastId,undefined,student.cookie);
+ await call('past-export?id='+pastId,undefined,peer.cookie,403);
+ await call('past-export?id='+pastId,undefined,faculty.cookie);
+ assert.equal((await call('past-events',undefined,peer.cookie)).data.total,0);
+ assert.equal((await call('past-events?q=Past',undefined,faculty.cookie)).data.total,1);
+ const reports=(await call('records?kind=reports&q=Past',undefined,admin)).data.rows;assert.equal(reports[0].hours,2);assert.equal(reports[0].source,'past_event');
+ await call('print?kind=reports',undefined,admin);
+ await call('past-event',{...archived,id:pastId,revision:0,title:'Past campus service amended',reason:'Corrected title'},admin);
+ await call('past-event',{...archived,id:pastId,revision:0},admin,409);
+ // Two competing edits: only one can credit the same ledger revision.
+ const concurrent=await Promise.all([3,4].map(hours=>api.POST(new Request('https://a.example.test/api/past-hours',{method:'POST',headers:{origin:'https://a.example.test',cookie:admin},body:JSON.stringify({...pastCredit,rows:[{...pastCredit.rows[0],revision:2,hours}]})}))));
+ assert.equal(concurrent.filter(r=>r.status===200).length,1);checks+=2;
+ const afterRace=(await call('past-event?id='+pastId,undefined,admin)).data;
+ assert.equal(afterRace.history.length,3);
+ await call('past-hours',{...pastCredit,rows:[{...pastCredit.rows[0],revision:3,hours:2}]},admin);
+ const guardDb=createClient({url:env.TURSO_DATABASE_URL});
+ await assert.rejects(()=>guardDb.execute("UPDATE past_event_hours SET delta=99 WHERE event_id='"+pastId+"'"));
+ await assert.rejects(()=>guardDb.execute({sql:'DELETE FROM past_event_hours WHERE event_id=?',args:[pastId]}));
+ await assert.rejects(()=>guardDb.execute({sql: "INSERT INTO past_event_hours(id,event_id,user_id,year,delta,balance,revision,source,reason,actor,created_at) VALUES('bad-credit',?,?,2,1,3,5,'register','invalid faculty credit',?,?)",args:[pastId,student.id,faculty.id,new Date(realNow).toISOString()]}));
+ assert.equal((await guardDb.execute({sql:'SELECT SUM(delta) hours FROM past_event_hours WHERE event_id=?',args:[pastId]})).rows[0].hours,2);
+ guardDb.close();
+ assert.equal((await call('system-health',undefined,admin)).data.ok,true);
+ // The archived entry does not create, overwrite or fake any live attendance/GPS rows.
+ assert.deepEqual((await detail()).original_in,originals[0]);
  // Source migrations rerun without altering accounts, passwords, or hours.
  const rerun=spawnSync(process.execPath,['scripts/migrate.mjs'],{env,encoding:'utf8'});assert.equal(rerun.status,0,rerun.stderr);
  await login('student@example.test');
- assert.equal((await call('state',undefined,student.cookie)).data.counts.hours,1);
+ assert.equal((await call('state',undefined,student.cookie)).data.counts.hours,3);
  await call('delete-account',{id:student.id,email:'student@example.test',password,reason:'Remove isolated test account'},admin);
  await call('state',undefined,student.cookie,401);
+ assert.equal((await call('past-event?id='+pastId,undefined,admin)).data.participants.length,0);
+ assert.equal((await call('system-health',undefined,admin)).data.ok,true);
+ await call('delete-account',{id:faculty.id,email:'faculty@example.test',password,reason:'Verify archived coordinator reassignment'},admin);
+ assert.equal((await call('past-event?id='+pastId,undefined,admin)).data.event.coordinator,(await call('state',undefined,admin)).data.user.id);
  await call('deletion-cleanup',{},admin);assert.equal(blobs.size,0);
  await call('file/'+ticket.id,undefined,admin,400);
- console.log(`${checks} real-handler integration requests passed: login, roles, attendance/GPS, private-photo authorization, original-time audit, hours, exports, persistence, cleanup and concurrent college isolation. Blob and GPS hardware were simulated.`);
+ console.log(`${checks} real-handler integration requests passed: login, roles, attendance/GPS, private-photo authorization, original-time audit, hours, exports, persistence, cleanup, archived events/credits and concurrent college isolation. Blob and GPS hardware were simulated.`);
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{fs.rmSync(temp,{recursive:true,force:true})});
