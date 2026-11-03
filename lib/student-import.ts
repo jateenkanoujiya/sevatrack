@@ -18,7 +18,7 @@ export async function inspectStudentImport(u:any,rows:any){
   const data={name:required(x.name,'Full name'),email,mobile:mobileNumber(x.mobile),nss_id,roll:required(x.roll,'Roll number',100),department:required(x.department,'Department',100),batch:required(x.batch,'NSS batch',100),year};
   if(emails.has(email)||ids.has(nss_id.toLowerCase()))throw new AppError('Duplicate email or NSS ID within this file.');emails.add(email);ids.add(nss_id.toLowerCase());
   const a=byEmail.get(email),b=byNss.get(nss_id.toLowerCase());
-  if(a||b){if(!a||!b||a.id!==b.id||a.role!=='STUDENT')throw new AppError('Email or NSS ID conflicts with an existing account.');results.push({row:i+2,data,status:'skip',message:'Existing student: account, details and password will remain unchanged.'})}
+  if(a||b){if(!a||!b||a.id!==b.id||!['STUDENT','VOLUNTEER'].includes(a.role))throw new AppError('Email or NSS ID conflicts with an existing account.');results.push({row:i+2,data,status:'skip',message:'Existing student: account, details and password will remain unchanged.'})}
   else results.push({row:i+2,data,status:'new',message:'Ready to create with a temporary password.'});
  }catch(e){results.push({row:i+2,status:'error',message:e instanceof AppError?e.message:'Invalid student details.'})}}
  return {rows:results,create:results.filter(x=>x.status==='new').length,skip:results.filter(x=>x.status==='skip').length,errors:results.filter(x=>x.status==='error').length};

@@ -7,7 +7,7 @@ import {AppError} from './errors';
 function admin(u:any){if(u.role!=='ADMIN'||!u.active)throw new AppError('Only active administrators can delete accounts.',403);}
 export async function deletionSummary(u:any,targetId:string){
  admin(u);
- const target=await one("SELECT id,name,email,role FROM users WHERE id=? AND role IN ('ADMIN','FACULTY','STUDENT')",targetId);
+ const target=await one("SELECT id,name,email,role FROM users WHERE id=? AND role IN ('ADMIN','FACULTY','VOLUNTEER','STUDENT')",targetId);
  if(!target)throw new AppError('Account not found.',404);
  if(target.id===u.id)throw new AppError('You cannot delete your own account.',409);
  const counts=await one(`SELECT

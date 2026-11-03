@@ -6,9 +6,9 @@ export function canEditHistorical(u:any,time=Date.now()){
 }
 function text(v:any,label:string,max:number){if(typeof v!=='string'||!v.trim()||v.trim().length>max)throw new AppError(`${label} is required (maximum ${max} characters).`);return v.trim();}
 export async function historicalBalances(u:any,student:string){
- if(u.role==='STUDENT'&&u.id!==student)throw new AppError('This student record is restricted.',403);
- if(!['STUDENT','FACULTY','ADMIN'].includes(u.role))throw new AppError('Access denied.',403);
- if(!await one("SELECT id FROM users WHERE id=? AND role='STUDENT'",student))throw new AppError('Student not found.',404);
+ if(['STUDENT','VOLUNTEER'].includes(u.role)&&u.id!==student)throw new AppError('This student record is restricted.',403);
+ if(!['ADMIN','FACULTY','VOLUNTEER','STUDENT'].includes(u.role))throw new AppError('Access denied.',403);
+ if(!await one("SELECT id FROM users WHERE id=? AND role IN ('STUDENT','VOLUNTEER')",student))throw new AppError('Student not found.',404);
  return {canEdit:canEditHistorical(u),deadline:HISTORICAL_DEADLINE,rows:await all('SELECT h.*,u.name actor_name FROM historical_hours h LEFT JOIN users u ON u.id=h.actor WHERE h.user_id=? ORDER BY h.revision DESC,h.year',student)};
 }
 export async function saveHistorical(u:any,b:any){
@@ -16,7 +16,7 @@ export async function saveHistorical(u:any,b:any){
  const reason=text(b.reason,'Reason',1000),source=text(b.source,'Supporting logbook or record reference',500);
  if(!Array.isArray(b.rows)||!b.rows.length||b.rows.length>200)throw new AppError('Submit 1–200 student/year balances.');
  const ids=b.rows.map((row:any)=>text(row.nss_id,'NSS ID',100));
- const balances=await all(`SELECT u.id,u.nss_id,y.year,ROUND(COALESCE(SUM(h.delta),0),2) hours,COALESCE(MAX(h.revision),0) revision FROM users u CROSS JOIN (SELECT 1 year UNION ALL SELECT 2) y LEFT JOIN historical_hours h ON h.user_id=u.id AND h.year=y.year WHERE u.role='STUDENT' AND u.nss_id IN (${ids.map(()=>'?').join(',')}) GROUP BY u.id,y.year`,...ids);
+ const balances=await all(`SELECT u.id,u.nss_id,y.year,ROUND(COALESCE(SUM(h.delta),0),2) hours,COALESCE(MAX(h.revision),0) revision FROM users u CROSS JOIN (SELECT 1 year UNION ALL SELECT 2) y LEFT JOIN historical_hours h ON h.user_id=u.id AND h.year=y.year WHERE u.role IN ('STUDENT','VOLUNTEER') AND u.nss_id IN (${ids.map(()=>'?').join(',')}) GROUP BY u.id,y.year`,...ids);
  const lookup=new Map(balances.map(row=>[row.nss_id+':'+row.year,row]));
  const seen=new Set<string>(),changes=[];
  for(const row of b.rows){
@@ -36,5 +36,5 @@ export async function saveHistorical(u:any,b:any){
 }
 export async function historicalTemplate(u:any){
  if(!canEditHistorical(u))throw new AppError('Historical entry is restricted.',403);
- return all(`SELECT u.nss_id,u.name,y.year,ROUND(COALESCE(SUM(h.delta),0),2) hours,COALESCE(MAX(h.revision),0) revision FROM users u CROSS JOIN (SELECT 1 year UNION ALL SELECT 2) y LEFT JOIN historical_hours h ON h.user_id=u.id AND h.year=y.year WHERE u.role='STUDENT' GROUP BY u.id,y.year ORDER BY u.name,y.year`);
+ return all(`SELECT u.nss_id,u.name,y.year,ROUND(COALESCE(SUM(h.delta),0),2) hours,COALESCE(MAX(h.revision),0) revision FROM users u CROSS JOIN (SELECT 1 year UNION ALL SELECT 2) y LEFT JOIN historical_hours h ON h.user_id=u.id AND h.year=y.year WHERE u.role IN ('STUDENT','VOLUNTEER') GROUP BY u.id,y.year ORDER BY u.name,y.year`);
 }

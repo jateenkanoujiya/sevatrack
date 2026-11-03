@@ -8,7 +8,7 @@ import {validateImage} from './uploads';
 const MAX=5*1024*1024;
 export async function photoAttendance(u:any,aid:string){
  const row=await one('SELECT a.*,e.coordinator,e.lat,e.lng,e.radius,e.status event_status FROM attendance a JOIN events e ON e.id=a.event_id WHERE a.id=?',aid);
- if(!row||(u.role==='STUDENT'&&row.user_id!==u.id)||(u.role==='FACULTY'&&row.coordinator!==u.id))throw new AppError('Attendance not found in your authorized scope.',403);
+ if(!row||(['STUDENT','VOLUNTEER'].includes(u.role)&&row.user_id!==u.id)||(u.role==='FACULTY'&&row.coordinator!==u.id))throw new AppError('Attendance not found in your authorized scope.',403);
  if(['APPROVED','PARTIAL'].includes(row.status))throw new AppError('This attendance is finalized. Ask an administrator to reopen it before changing evidence.',403);
  if(row.event_status==='Cancelled'||['REGISTERED','CANCELLED','REJECTED','ABSENT'].includes(row.status))throw new AppError('This attendance no longer accepts proof. Contact your coordinator.');
  if(!row.original_in||!verifiedAttendanceGPS(row.location_in,row))throw new AppError('Verify your GPS check-in at the event before submitting photo proof.');

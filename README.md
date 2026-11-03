@@ -20,7 +20,7 @@ No sample accounts, events, photos, hours, or directory entries are inserted. Th
 
 ## Integrity and permissions
 
-All APIs authenticate an active account using a hashed, expiring session. Incoming ChatGPT/platform identity headers are not trusted. Students can access only their attendance, evidence, correction requests and ledger. Faculty attendance and evidence access is scoped to events they coordinate; the student directory includes program-wide progress. Administrators manage settings and accounts.
+All APIs authenticate an active account using a hashed, expiring session. Incoming ChatGPT/platform identity headers are not trusted. Role order is Admin → Faculty → Volunteer → Student. Students and Volunteers can access only their own attendance, evidence, correction requests and ledger. Volunteer is a senior participant designation; it does not grant staff approval or account-management access. Administrators assign it in Accounts → Manage → Role. Faculty attendance and evidence access is scoped to events they coordinate; the student directory includes program-wide progress. Administrators manage settings and accounts.
 
 Original check-in/out times are immutable. Faculty edits change effective times, require a reason, use a revision guard, and append immutable adjustment, audit and ledger records in one transaction. Hours are calculated from the append-only ledger. Year 1 and Year 2 remain independent; defaults are 120 hours each. Event cancellation reverses credits atomically.
 

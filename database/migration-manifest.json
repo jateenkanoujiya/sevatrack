@@ -30,5 +30,9 @@
   {
     "name": "008_student_import.sql",
     "checksum": "6f56c030c3766dbd96a22e773274b50a55b7792c4c9406b71a54f99ca64288a2"
+  },
+  {
+    "name": "009_volunteer_role.sql",
+    "checksum": "f7374f9d7161ab1e566b0098349f93bd374027171bd18ccb4ec75fabd0976737"
   }
 ]

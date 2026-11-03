@@ -6,12 +6,12 @@ function number(v:any,label:string,min:number,max:number){const n=Number(v);if(v
 export async function pastEvent(u:any,eventId:string){
  const e=await one('SELECT e.*,u.name coordinator_name FROM past_events e JOIN users u ON u.id=e.coordinator WHERE e.id=?',eventId);
  if(!e)throw new AppError('Past event not found.',404);
- if(u.role==='FACULTY'&&e.coordinator!==u.id||u.role==='STUDENT'&&!await one('SELECT id FROM past_event_hours WHERE event_id=? AND user_id=?',eventId,u.id))throw new AppError('This past event is restricted.',403);
+ if(u.role==='FACULTY'&&e.coordinator!==u.id||['STUDENT','VOLUNTEER'].includes(u.role)&&!await one('SELECT id FROM past_event_hours WHERE event_id=? AND user_id=?',eventId,u.id))throw new AppError('This past event is restricted.',403);
  return e;
 }
 export async function pastEvents(u:any,p:URLSearchParams){
  const query=(p.get('q')||'').slice(0,150),page=Math.max(1,Math.floor(Number(p.get('page'))||1)),size=25;
- const scope=u.role==='STUDENT'?'EXISTS(SELECT 1 FROM past_event_hours h WHERE h.event_id=e.id AND h.user_id=?)':u.role==='FACULTY'?'e.coordinator=?':'1=1';
+ const scope=['STUDENT','VOLUNTEER'].includes(u.role)?'EXISTS(SELECT 1 FROM past_event_hours h WHERE h.event_id=e.id AND h.user_id=?)':u.role==='FACULTY'?'e.coordinator=?':'1=1';
  const args:any[]=u.role==='ADMIN'?[]:[u.id];let where=scope;
  if(query){where+=' AND (e.title LIKE ? OR e.location LIKE ? OR e.category LIKE ?)';args.push(...Array(3).fill('%'+query+'%'))}
  const count=await one(`SELECT COUNT(*) total FROM past_events e WHERE ${where}`,...args),pages=Math.max(1,Math.ceil(count.total/size)),current=Math.min(page,pages);
@@ -19,7 +19,7 @@ export async function pastEvents(u:any,p:URLSearchParams){
  return {rows,page:current,pages,total:count.total};
 }
 export async function pastDetail(u:any,eventId:string){
- const event=await pastEvent(u,eventId),scope=u.role==='STUDENT'?' AND h.user_id=?':'',args=u.role==='STUDENT'?[eventId,u.id]:[eventId];
+ const event=await pastEvent(u,eventId),scope=['STUDENT','VOLUNTEER'].includes(u.role)?' AND h.user_id=?':'',args=['STUDENT','VOLUNTEER'].includes(u.role)?[eventId,u.id]:[eventId];
  const participants=await all(`SELECT h.user_id,h.year,ROUND(SUM(h.delta),2) hours,MAX(h.revision) revision,u.name,u.nss_id FROM past_event_hours h JOIN users u ON u.id=h.user_id WHERE h.event_id=?${scope} GROUP BY h.user_id,h.year ORDER BY u.name`,...args);
  const history=await all(`SELECT h.*,u.name student_name,a.name actor_name FROM past_event_hours h JOIN users u ON u.id=h.user_id LEFT JOIN users a ON a.id=h.actor WHERE h.event_id=?${scope} ORDER BY h.created_at DESC,h.revision DESC LIMIT 100`,...args);
  return {event,participants,history};
@@ -44,7 +44,7 @@ export async function savePastHours(u:any,b:any){
  const reason=text(b.reason,'Reason',1000),source=text(b.source,'Supporting register / logbook reference');
  if(!Array.isArray(b.rows)||!b.rows.length||b.rows.length>100)throw new AppError('Select 1–100 students per save.');
  const nssIds=b.rows.map((r:any)=>text(r.nss_id,'NSS ID',100));
- const balances=await all(`SELECT u.id,u.name,u.nss_id,ROUND(COALESCE(SUM(h.delta),0),2) hours,COALESCE(MAX(h.revision),0) revision,MIN(h.year) year FROM users u LEFT JOIN past_event_hours h ON h.user_id=u.id AND h.event_id=? WHERE u.role='STUDENT' AND u.nss_id IN (${nssIds.map(()=>'?').join(',')}) GROUP BY u.id`,e.id,...nssIds);
+ const balances=await all(`SELECT u.id,u.name,u.nss_id,ROUND(COALESCE(SUM(h.delta),0),2) hours,COALESCE(MAX(h.revision),0) revision,MIN(h.year) year FROM users u LEFT JOIN past_event_hours h ON h.user_id=u.id AND h.event_id=? WHERE u.role IN ('STUDENT','VOLUNTEER') AND u.nss_id IN (${nssIds.map(()=>'?').join(',')}) GROUP BY u.id`,e.id,...nssIds);
  const lookup=new Map(balances.map(r=>[r.nss_id,r]));
  const seen=new Set(),changes=[];
  for(const row of b.rows){

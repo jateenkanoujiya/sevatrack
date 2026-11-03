@@ -10,6 +10,7 @@ export async function context(r:Request){let u:any=null;const token=cookie(r,'se
  if(token){u=await one('SELECT u.* FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.id=? AND s.expires>?',await digest(token),now());if(!u)throw new AppError('Your session has expired. Please sign in again.',401)}
 
  if(!u)throw new AppError('Please sign in with an enrolled account to continue.',401);
+ if(!['ADMIN','FACULTY','VOLUNTEER','STUDENT'].includes(u.role))throw new AppError('This account role cannot sign in.',403);
  if(!u.active)throw new AppError('Your account is deactivated. Contact your NSS administrator.',403);
  if(u.password_change_required&&!['/api/state','/api/change-password'].includes(new URL(r.url).pathname))throw new AppError('Change your temporary password before using SevaTrack.',403);
  return {u,actual:u};
