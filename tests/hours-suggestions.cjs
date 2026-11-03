@@ -1,0 +1,13 @@
+const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict');
+const x={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/domain.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports:x,require:()=>({AppError:Error}),Date,Math,Number});
+const a={status:'PENDING_REVIEW',approved_hours:0,effective_in:'2026-11-03T08:00:00Z',effective_out:'2026-11-03T10:00:00Z',event_hours:3};
+assert.equal(x.suggestedNSSHours(a),2);
+assert.equal(x.suggestedNSSHours({...a,event_hours:1}),1);
+assert.equal(x.suggestedNSSHours({...a,event_hours:0}),2);
+assert.equal(x.suggestedNSSHours({...a,effective_out:'2026-11-03T08:30:00Z'}),0.5);
+assert.equal(x.suggestedNSSHours({...a,effective_out:null}),null);
+assert.equal(x.suggestedNSSHours({...a,effective_out:a.effective_in}),null);
+assert.equal(x.suggestedNSSHours({...a,effective_out:'2026-11-05T10:00:00Z'}),null);
+assert.equal(x.suggestedNSSHours({...a,status:'APPROVED',approved_hours:0}),0);
+assert.equal(x.suggestedNSSHours({...a,status:'APPROVED',approved_hours:1.25}),1.25);
+console.log('9 hours suggestion checks passed: duration, event cap, invalid times and preservation of existing approvals.');

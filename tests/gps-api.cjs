@@ -24,5 +24,9 @@ function setup(patch={}){
  const coarse={lat:19+94/111195,lng:72,accuracy:149,clientTime:new Date().toISOString()};
  {const s=setup({event:widerEvent,user:{id:'student',role:'STUDENT'},record:{status:'REGISTERED',original_in:null}}),r=await s.call('check',{id:'attendance',kind:'in',location:coarse});assert.equal(r.status,200);const saved=JSON.parse(s.writes[0].args[2]);assert.equal(saved.verification,'EVENT_GEOFENCE_V2');assert.equal(saved.status,'Location verified');count++}
  {const verified=JSON.stringify(domain.attendanceGPS(coarse,{lat:19,lng:72,radius:250}));const s=setup({event:widerEvent,record:{location_in:verified,location_out:verified}}),r=await s.call('review',body);assert.equal(r.status,200);assert.equal(s.writes.find(x=>x.table==='hour_ledger').data.delta,1);count++}
+ for(const confirmZeroHours of [undefined,false,'false']){const s=setup(),r=await s.call('review',{...body,hours:0,confirmZeroHours});assert.equal(r.status,400);assert.equal(s.writes.length,0);count++}
+ {const s=setup(),r=await s.call('review',{...body,hours:0,confirmZeroHours:true});assert.equal(r.status,200);assert.equal(s.writes.find(x=>x.table==='hour_ledger').data.delta,0);count++}
+ {const s=setup({event:{hours:0.5}}),r=await s.call('review',{...body,hoursMode:'calculated',hours:undefined});assert.equal(r.status,200);assert.equal(s.writes.find(x=>x.table==='hour_ledger').data.delta,0.5);count++}
+ {const s=setup(),r=await s.call('bulk-review',{records:[{id:'attendance',revision:2,effective_in:body.effective_in,effective_out:body.effective_out}],review:{status:'APPROVED',hours:0,reason:body.reason}});assert.equal(r.status,200);assert.equal(r.data.failed,1);assert.equal(s.writes.length,0);count++}
  console.log(`${count} actual API-handler checks passed with mocked database.`);
 })().catch(e=>{console.error(e);process.exitCode=1});
