@@ -175,6 +175,28 @@ async function main(){
  assert.equal((await call('past-event?id='+pastId,undefined,admin)).data.event.coordinator,(await call('state',undefined,admin)).data.user.id);
  await call('deletion-cleanup',{},admin);assert.equal(blobs.size,0);
  await call('file/'+ticket.id,undefined,admin,400);
- console.log(`${checks} real-handler integration requests passed: login, roles, attendance/GPS, private-photo authorization, original-time audit, hours, exports, persistence, cleanup, archived events/credits and concurrent college isolation. Blob and GPS hardware were simulated.`);
+ // Import 100 real student accounts atomically into this disposable database.
+ const temporary='Disposable-import-only-password-2026';process.env.SEVATRACK_A_IMPORT_PASSWORD=temporary;
+ const roster=Array.from({length:100},(_,i)=>({name:'Roster Student '+i,email:'roster'+i+'@example.test',mobile:'98765'+String(i).padStart(5,'0'),nss_id:'BULK'+i,roll:String(i).padStart(3,'0'),department:'Science',batch:'2026',year:i%2+1}));
+ await call('import-preview',{rows:roster},peer.cookie,403);
+ await call('import',{rows:roster},outsider.cookie,403);
+ assert.equal((await call('import-preview',{rows:roster},admin)).data.create,100);
+ const bad=[roster[0],{...roster[1],email:roster[0].email}];assert.equal((await call('import-preview',{rows:bad},admin)).data.errors,1);
+ await call('import',{rows:bad},admin,400);
+ assert.equal((await call('import',{rows:roster},admin)).data.created,100);
+ assert.equal((await call('import',{rows:roster},admin)).data.created,0);
+ const conflict=[{...roster[0],nss_id:'OTHER-ID'}];await call('import',{rows:conflict},admin,400);
+ const loginTemp=await call('auth',{action:'login',email:roster[0].email,password:temporary});
+ const tempCookie=loginTemp.response.headers.get('set-cookie').split(';')[0];
+ const limited=(await call('state',undefined,tempCookie)).data;assert.equal(limited.passwordChangeRequired,true);assert.equal(limited.students,undefined);
+ await call('records?kind=events',undefined,tempCookie,403);await call('past-events',undefined,tempCookie,403);
+ await call('change-password',{password:temporary},tempCookie,400);await call('change-password',{password:'short'},tempCookie,400);
+ const changed=await call('change-password',{password},tempCookie);const newCookie=changed.response.headers.get('set-cookie').split(';')[0];
+ await call('state',undefined,tempCookie,401);
+ const studentState=(await call('state',undefined,newCookie)).data;assert.equal(studentState.user.password_change_required,0);assert.equal(studentState.user.mobile,'9876500000');assert.equal(studentState.students[0].roll,'000');
+ await call('auth',{action:'login',email:roster[0].email,password:temporary},null,400);
+ await call('import',{rows:roster},admin);await login(roster[0].email);
+ const bPreview=(await call('import-preview',{rows:[roster[0]]},bAdmin,200,'b.example.test')).data;assert.equal(bPreview.create,1);
+ console.log(`${checks} real-handler integration requests passed: login, roles, attendance/GPS, private-photo authorization, original-time audit, hours, exports, persistence, cleanup, archived events/credits, 100-student import, forced password changes and concurrent college isolation. Blob and GPS hardware were simulated.`);
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{fs.rmSync(temp,{recursive:true,force:true})});

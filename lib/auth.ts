@@ -11,6 +11,7 @@ export async function context(r:Request){let u:any=null;const token=cookie(r,'se
 
  if(!u)throw new AppError('Please sign in with an enrolled account to continue.',401);
  if(!u.active)throw new AppError('Your account is deactivated. Contact your NSS administrator.',403);
+ if(u.password_change_required&&!['/api/state','/api/change-password'].includes(new URL(r.url).pathname))throw new AppError('Change your temporary password before using SevaTrack.',403);
  return {u,actual:u};
 }
 export function sessionCookie(name:string,value:string,max=28800){return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${max}`;}

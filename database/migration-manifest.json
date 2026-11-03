@@ -26,5 +26,9 @@
   {
     "name": "007_past_events.sql",
     "checksum": "bd57ffc191cefa2ce49b90749681633cd1f5b987bca14d3f628371b34d2eab80"
+  },
+  {
+    "name": "008_student_import.sql",
+    "checksum": "6f56c030c3766dbd96a22e773274b50a55b7792c4c9406b71a54f99ca64288a2"
   }
 ]
