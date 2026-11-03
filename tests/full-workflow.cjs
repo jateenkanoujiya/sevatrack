@@ -52,6 +52,20 @@ async function main(){
   return {id:data.id,cookie:await login(name+'@example.test')};
  }
  const student=await user('student','STUDENT'),peer=await user('peer','STUDENT'),faculty=await user('faculty','FACULTY'),outsider=await user('other-faculty','FACULTY');
+ // Staff accounts require no student enrollment fields, and supplied stale values are discarded.
+ for(const role of ['ADMIN','FACULTY']){
+  const payload={name:'Staff '+role,email:'staff-'+role.toLowerCase()+'@example.test',role,active:true,department:'Science',reason:'Staff profile regression'};
+  const createdStaff=(await call('user',payload,admin)).data;
+  await call('user',{...payload,id:createdStaff.id,batch:'Must not persist',year:2,roll:'STALE',nss_id:'STALE-'+role},admin);
+  const staff=(await call('state',undefined,admin)).data.users.find(x=>x.id===createdStaff.id);
+  assert.equal(staff.batch,'');assert.equal(staff.roll,'');assert.equal(staff.nss_id,null);assert.equal(staff.year,null);
+ }
+ const staffProfile=(await call('state',undefined,faculty.cookie)).data.user;
+ assert.equal(staffProfile.year,null);assert.equal(staffProfile.batch,'');assert.equal(staffProfile.roll,'');
+ for(const role of ['STUDENT','VOLUNTEER']){
+  await call('user',{name:'Incomplete participant',email:'missing-'+role+'@example.test',role,active:true,department:'Science',nss_id:'missing-'+role,reason:'Required fields test'},admin,400);
+ }
+
  for(const kind of ['department','batch','academic_year','category']){
   await call('catalog',{kind,name:'QA '+kind},admin);
   const {data:s}=await call('state',undefined,admin);

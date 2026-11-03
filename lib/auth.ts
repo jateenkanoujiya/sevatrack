@@ -16,4 +16,4 @@ export async function context(r:Request){let u:any=null;const token=cookie(r,'se
  return {u,actual:u};
 }
 export function sessionCookie(name:string,value:string,max=28800){return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${max}`;}
-export function safeUser(u:any){const {password,...out}=u;return out;}
+export function safeUser(u:any){const {password,...out}=u;if(['ADMIN','FACULTY'].includes(out.role)){out.batch='';out.roll='';out.nss_id=null;out.year=null;}return out;}

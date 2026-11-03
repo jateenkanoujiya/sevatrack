@@ -34,5 +34,9 @@
   {
     "name": "009_volunteer_role.sql",
     "checksum": "f7374f9d7161ab1e566b0098349f93bd374027171bd18ccb4ec75fabd0976737"
+  },
+  {
+    "name": "010_staff_profile_fields.sql",
+    "checksum": "4dc75cf367dd1756cdd3ed099fcf68110997d6fefd64fdc17367dfe4e4d04703"
   }
 ]
