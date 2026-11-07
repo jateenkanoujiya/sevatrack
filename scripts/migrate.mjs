@@ -36,3 +36,25 @@ try{
 }finally{client.close();}
 
 }
+
+// Control-plane tables are installed only in the original database.
+if(process.env.SEVATRACK_PLATFORM_ENABLED==='1'){
+ if(colleges.length)throw new Error('Self-service institutes require the default control database; keep host-based mode separate.');
+ const {openTenant}=await import('../lib/tenant-secrets.mjs');
+ const {migrateTenant}=await import('../lib/tenant-schema.mjs');
+ const master=createClient({url:process.env.TURSO_DATABASE_URL,authToken:process.env.TURSO_AUTH_TOKEN});
+ try{
+  const schema=await readFile(new URL('../database/platform.sql',import.meta.url),'utf8');
+  await master.batch(schema.split('--> statement-breakpoint').map(x=>x.trim()).filter(Boolean),'write');
+  const existing=await master.execute('SELECT user_id FROM platform_owner WHERE singleton=1');
+  if(!existing.rows.length){
+   const owner=(await master.execute({sql:"SELECT id FROM users WHERE email=? AND role='ADMIN' AND active=1",args:[(process.env.SEVATRACK_PLATFORM_OWNER_EMAIL||'').toLowerCase()]})).rows[0];
+   if(!owner)throw new Error('Configure the email of an existing active administrator as SEVATRACK_PLATFORM_OWNER_EMAIL.');
+   await master.execute({sql:'INSERT OR IGNORE INTO platform_owner VALUES(1,?)',args:[owner.id]});
+  }
+  // Every managed database receives the same checksum-verified schema on deployment.
+  const tenants=(await master.execute("SELECT id,credentials FROM platform_institutes WHERE credentials IS NOT NULL AND status IN ('ACTIVE','SUSPENDED')")).rows;
+  for(const tenant of tenants){const c=openTenant(tenant.id,tenant.credentials),client=createClient(c);try{await migrateTenant(client,tenant)}finally{client.close()}}
+  console.log('Institute portal schema ready; managed institute schemas verified.');
+ }finally{master.close()}
+}

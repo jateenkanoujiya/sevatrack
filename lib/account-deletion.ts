@@ -1,4 +1,5 @@
-import {blobOptions} from './college';
+import {protectPlatformOwner} from './platform-core';
+import {blobOptions,storagePath,currentCollege} from './college';
 import {del,list} from '@vercel/blob';
 import {all,one,sql,id,now} from './db';
 import {passwordHash,constantEqual,rate} from './auth';
@@ -18,7 +19,7 @@ export async function deletionSummary(u:any,targetId:string){
  return {target,counts};
 }
 export async function deleteAccount(u:any,b:any){
- admin(u);await rate('delete-account-'+u.id,5);
+ admin(u);if(currentCollege().id==='default')await protectPlatformOwner(u,String(b.id));await rate('delete-account-'+u.id,5);
  if(typeof b.id!=='string'||typeof b.email!=='string'||typeof b.password!=='string'||typeof b.reason!=='string'||b.reason.trim().length<1||b.reason.length>1000||b.password.length>128)throw new AppError('Enter the account email, your password and a deletion reason.');
  const current=await one("SELECT * FROM users WHERE id=? AND role='ADMIN' AND active=1",u.id);
  if(!current?.password||!constantEqual(await passwordHash(b.password,current.password.split(':')[0]),current.password))throw new AppError('Your administrator password is incorrect.',403);
@@ -37,11 +38,11 @@ export async function cleanupDeletedPhotos(u:any){
    if(!/^evidence\/[^/]+\/$/.test(job.prefix))throw new Error('Invalid cleanup prefix');
    // Bounded work per call. Re-list from the start on retries; only this deleted
    // account's server-generated prefix is ever accepted, never request paths.
-   let empty=false;
+   const prefix=storagePath(job.prefix);let empty=false;
    for(let page=0;page<3;page++){
-    const result=await list({prefix:job.prefix,limit:100,...blobOptions()});
+    const result=await list({prefix,limit:100,...blobOptions()});
     if(!result.blobs.length){empty=true;break;}
-    if(result.blobs.some((blob:{pathname:string})=>!blob.pathname.startsWith(job.prefix)))throw new Error('Unexpected photo path');
+    if(result.blobs.some((blob:{pathname:string})=>!blob.pathname.startsWith(prefix)))throw new Error('Unexpected photo path');
     await del(result.blobs.map((blob:{pathname:string})=>blob.pathname),blobOptions());
    }
    if(empty&&Date.parse(job.not_before)<=Date.now()){

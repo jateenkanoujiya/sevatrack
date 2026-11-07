@@ -1,0 +1,1 @@
+export async function portal(action:string,body?:any){const r=await fetch('/api/platform/'+action,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});let d;try{d=await r.json()}catch{throw new Error('The service is temporarily unavailable. Try again.')};if(!r.ok)throw new Error(d.error||'Please try again.');return d}

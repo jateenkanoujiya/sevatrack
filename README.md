@@ -40,3 +40,26 @@ Attendance, events, evidence, history, corrections, reports and audit records su
 - `npm run db:migrate`: production schema migration; run only against the intended configured database.
 
 The earlier Cloudflare deployment remains on the main branch. This Vercel migration lives on `deploy/vercel`; its runtime and SDK integration must pass the Vercel build and live role/upload verification before launch sign-off.
+
+## Institute registration and platform ownership
+
+Open `/institutes` for public registration, application status and the approved institute directory. Open `/platform` for the owner-only approval console. The existing college remains at `/` (choose **Existing college login** to return to it).
+
+The original database holds the platform registry and its original college records. Every newly approved institute gets a **separate Turso database**, its own users and sessions, settings, events, attendance and hours. Platform metadata is never copied into institute databases. New institute administrators have no platform-owner privileges. The owner identity is pinned to the existing administrator's immutable user ID at initial setup; other college administrators cannot modify, recover or delete that account.
+
+Production configuration:
+
+- `SEVATRACK_PLATFORM_ENABLED=1`
+- `SEVATRACK_PLATFORM_OWNER_EMAIL`: email of the existing active administrator who owns the platform; only used to initialize the pinned owner ID.
+- `SEVATRACK_TENANT_KEY`: a securely generated 32-byte key encoded as 64 hex characters. Back this up securely; do not replace it without re-encrypting stored institute credentials.
+- `SEVATRACK_TURSO_ORGANIZATION`, `SEVATRACK_TURSO_GROUP`, `SEVATRACK_TURSO_API_TOKEN`: enable automatic database creation. The existing `TURSO_AUTH_TOKEN` is a SQL token and cannot provision databases.
+
+Create an organization-scoped Turso API token with only `read`, `db:create` and `db:mint-token` scopes, then put it in the Vercel Production environment. See https://docs.turso.tech/api-reference/authentication. Database creation is subject to the organization's plan and quotas; SevaTrack does not upgrade a billing plan. Without provider credentials, the owner can attach a **new empty** Turso database during approval. Existing databases, the original college database and databases already bound to a different institute are rejected.
+
+Applicants choose a password of at least 16 characters. The owner verifies the institute/contact and provides a reason before approving. The administrator exists only after schema setup succeeds. Failed provisioning remains blocked and can be retried; no approval emails are sent automatically. Applicants check `/institutes` → **Application status**, then use their registered email/password in the approved workspace.
+
+Suspension blocks all institute API access, including existing sessions. Reactivation clears institute sessions before restoring access. Institute credential records use authenticated encryption bound to the institute ID. The private Blob store is shared with strict per-institute object prefixes and database-authorized viewing; databases are physically separate, photo stores are not. Existing college photo paths remain unchanged. Account deletion cleanup cannot cross institute prefixes.
+
+Deployments apply checksum-verified migrations to every active/suspended managed database. Back up the original registry database **and each institute database**, plus private photos and the tenant encryption key; the legacy backup CLI does not automatically enumerate self-service institute databases. Do not reset the original database: it contains the owner binding and institute registry. Institute recovery links select the correct workspace before password setup.
+
+Tests: `node tests/institute-platform.cjs` exercises real isolated SQL databases and HTTP handlers. Provider API and physical phone/browser GPS verification are separate from these automated tests.

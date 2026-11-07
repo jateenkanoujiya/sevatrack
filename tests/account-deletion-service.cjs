@@ -7,7 +7,7 @@ function setup(overrides={}){
  const db={one:async(q)=>q.includes('COUNT(*) n')?{n:0}:q.includes('SELECT * FROM users')?{id:'admin',role:'ADMIN',active:1,password:'salt:hash'}:q.includes('SELECT id,name')?{id:'student',email:'s@example.test',role:'STUDENT'}:{attendance:1,photos:1,hours:4,events:0},all:async()=>[],sql:(q,...args)=>({run:async()=>{calls.push({q,args})}}),id:()=> 'job',now:()=>new Date().toISOString(),...overrides.db};
  const auth={rate:async()=>{},passwordHash:async(p)=>p==='correct'?'salt:hash':'wrong',constantEqual:(a,b)=>a===b,...overrides.auth};
  const blob={list:async()=>({blobs:[]}),del:async()=>{},...overrides.blob};
- const exports={};vm.runInNewContext(code,{exports,require:n=>({'./college':{blobOptions:()=>({})},'./db':db,'./auth':auth,'./errors':{AppError},'@vercel/blob':blob}[n]),Date,Error});
+ const exports={};vm.runInNewContext(code,{exports,require:n=>({'./college':{blobOptions:()=>({}),storagePath:p=>p,currentCollege:()=>({id:'default'})},'./platform-core':{protectPlatformOwner:async()=>{}},'./db':db,'./auth':auth,'./errors':{AppError},'@vercel/blob':blob}[n]),Date,Error});
  return {service:exports,calls};
 }
 const admin={id:'admin',role:'ADMIN',active:1};

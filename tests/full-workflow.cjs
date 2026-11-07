@@ -15,6 +15,7 @@ function load(filename){
   if(name==='@vercel/blob')return blob;
   if(name.endsWith('.json'))return require(path.resolve(name.replace('@/', './')));
   if(name.endsWith('college-config.mjs'))return collegeConfig;
+  if(name.endsWith('.mjs'))return require(path.resolve(path.dirname(filename),name));
   if(name.startsWith('@/'))return load(name.slice(2)+'.ts');
   if(name.startsWith('.'))return load(path.resolve(path.dirname(filename),name)+'.ts');
   return require(name);
