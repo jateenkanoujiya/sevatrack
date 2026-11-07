@@ -1,6 +1,6 @@
 import {all,one,db,sql,insert,id,now,audit,notice} from './db';
 import {AppError} from './errors';
-function admin(u:any){if(u.role!=='ADMIN'||!u.active)throw new AppError('Only an active administrator may record past events or change their hours.',403)}
+function admin(u:any){if(!['SUPER_ADMIN','ADMIN'].includes(u.role)||!u.active)throw new AppError('Only an active administrator may record past events or change their hours.',403)}
 function text(v:any,label:string,max=500){if(typeof v!=='string'||!v.trim()||v.trim().length>max)throw new AppError(`${label} is required (maximum ${max} characters).`);return v.trim()}
 function number(v:any,label:string,min:number,max:number){const n=Number(v);if(v===null||v===undefined||typeof v==='boolean'||String(v).trim()===''||!Number.isFinite(n)||n<min||n>max||Math.abs(n*100-Math.round(n*100))>0.000001)throw new AppError(`${label} must be ${min}–${max}, with up to 2 decimals.`);return n}
 export async function pastEvent(u:any,eventId:string){
@@ -12,7 +12,7 @@ export async function pastEvent(u:any,eventId:string){
 export async function pastEvents(u:any,p:URLSearchParams){
  const query=(p.get('q')||'').slice(0,150),page=Math.max(1,Math.floor(Number(p.get('page'))||1)),size=25;
  const scope=['STUDENT','VOLUNTEER'].includes(u.role)?'EXISTS(SELECT 1 FROM past_event_hours h WHERE h.event_id=e.id AND h.user_id=?)':u.role==='FACULTY'?'e.coordinator=?':'1=1';
- const args:any[]=u.role==='ADMIN'?[]:[u.id];let where=scope;
+ const args:any[]=['SUPER_ADMIN','ADMIN'].includes(u.role)?[]:[u.id];let where=scope;
  if(query){where+=' AND (e.title LIKE ? OR e.location LIKE ? OR e.category LIKE ?)';args.push(...Array(3).fill('%'+query+'%'))}
  const count=await one(`SELECT COUNT(*) total FROM past_events e WHERE ${where}`,...args),pages=Math.max(1,Math.ceil(count.total/size)),current=Math.min(page,pages);
  const rows=await all(`SELECT e.* FROM past_events e WHERE ${where} ORDER BY e.start DESC,e.id LIMIT ? OFFSET ?`,...args,size,(current-1)*size);
@@ -30,7 +30,7 @@ export async function savePastEvent(u:any,b:any){
  if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start||end>Date.now()||end-start>86400000)throw new AppError('Use an event that has already ended, with a positive duration of up to 24 hours. Split multi-day camps into daily records.');
  const data={title:text(b.title,'Event title',150),category:text(b.category,'Category',150),description:text(b.description,'Description',3000),start:new Date(start).toISOString(),end:new Date(end).toISOString(),location:text(b.location,'Location',300),hours:number(b.hours,'Maximum service hours',0.01,24),source:text(b.source,'Supporting register / logbook reference'),coordinator:text(b.coordinator,'Coordinator',100)};
  if(!await one("SELECT id FROM catalogs WHERE kind='category' AND name=?",data.category))throw new AppError('Choose an existing event category.');
- if(!await one("SELECT id FROM users WHERE id=? AND role IN ('ADMIN','FACULTY') AND active=1",data.coordinator))throw new AppError('Choose an active coordinator.');
+ if(!await one("SELECT id FROM users WHERE id=? AND role IN ('SUPER_ADMIN','ADMIN','FACULTY') AND active=1",data.coordinator))throw new AppError('Choose an active coordinator.');
  const existing=b.id?await pastEvent(u,b.id):null,eventId=existing?.id||id();
  if(await one('SELECT id FROM past_events WHERE lower(trim(title))=lower(?) AND start=? AND lower(trim(location))=lower(?) AND id!=?',data.title,data.start,data.location,eventId)||await one('SELECT id FROM events WHERE lower(trim(title))=lower(?) AND start=? AND lower(trim(location))=lower(?)',data.title,data.start,data.location))throw new AppError('An event with this title, start time and location already exists. Use its existing record.',409);
  if(existing&&(!Number.isInteger(b.revision)||b.revision!==existing.revision))throw new AppError('Event changed. Reload before editing.',409);

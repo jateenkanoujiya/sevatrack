@@ -63,3 +63,15 @@ Suspension blocks all institute API access, including existing sessions. Reactiv
 Deployments apply checksum-verified migrations to every active/suspended managed database. Back up the original registry database **and each institute database**, plus private photos and the tenant encryption key; the legacy backup CLI does not automatically enumerate self-service institute databases. Do not reset the original database: it contains the owner binding and institute registry. Institute recovery links select the correct workspace before password setup.
 
 Tests: `node tests/institute-platform.cjs` exercises real isolated SQL databases and HTTP handlers. Provider API and physical phone/browser GPS verification are separate from these automated tests.
+
+
+### Institute leadership and owner workspace access
+
+Hierarchy: Platform Owner → Institute Super Admin → Admin → Faculty → Volunteer → Student.
+
+- Each new institute's verified registration contact becomes its Super Admin on approval. Existing institute initial admins are promoted by migration 011; passwords, student records and hours are preserved. The original workspace promotes its earliest active admin, and its pinned platform owner retains leadership access.
+- Only Super Admins (and the owner within that institute) can open Institute Settings, save programme configuration, manage directories or run system checks. Ordinary Admins retain event, attendance, report and student management duties.
+- A Super Admin can create Admin, Faculty, Volunteer and Student accounts within its own database. Ordinary Admins cannot create, change, recover or delete Admin/Super Admin accounts. Only the platform owner can appoint additional Super Admins or manage another Super Admin. The final active institute Super Admin cannot be removed.
+- In `/platform`, choose **Open workspace as owner**, enter an access reason, and manage the selected active institute. A visible owner banner includes **Return to owner console**. The access reason is recorded in platform and institute audit histories; subsequent mutations retain the owner's attributed identity.
+- Owner workspace access lasts at most four hours, requires the still-valid owner login on every request, and is bound to one institute. Opening another workspace, leaving it, signing out of the owner console or suspending the institute revokes access. Support identities cannot sign in or receive recovery links through institute login.
+- Databases and private photo prefixes remain isolated. Changing an institute cookie does not move a user's session or owner access grant to another college.

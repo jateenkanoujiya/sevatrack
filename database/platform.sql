@@ -17,3 +17,9 @@ CREATE TABLE IF NOT EXISTS platform_sessions (id TEXT PRIMARY KEY,user_id TEXT N
 CREATE TABLE IF NOT EXISTS platform_rate_limits (key TEXT PRIMARY KEY,count INTEGER NOT NULL,expires TEXT NOT NULL);
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS platform_audit (id TEXT PRIMARY KEY,actor TEXT NOT NULL,institute_id TEXT,action TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS platform_workspace_access (
+ id TEXT PRIMARY KEY,session_id TEXT NOT NULL,institute_id TEXT NOT NULL,proxy_id TEXT NOT NULL,expires TEXT NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS platform_workspace_session ON platform_workspace_access(session_id);

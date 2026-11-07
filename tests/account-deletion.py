@@ -8,7 +8,7 @@ class Deletion(unittest.TestCase):
   for f in sorted(Path('database/migrations').glob('*.sql')):
    for s in f.read_text().split('--> statement-breakpoint'):
     if s.strip():self.db.execute(s)
-  for uid,role in [('admin','ADMIN'),('other','ADMIN'),('faculty','FACULTY'),('student','STUDENT'),('peer','STUDENT')]:
+  for uid,role in [('admin','SUPER_ADMIN'),('other','ADMIN'),('faculty','FACULTY'),('student','STUDENT'),('peer','STUDENT')]:
    self.db.execute('INSERT INTO users(id,email,name,role,password,created_at) VALUES(?,?,?,?,?,?)',(uid,uid+'@example.test',uid,role,'hash','2026-01-01'))
   self.db.execute("INSERT INTO events(id,title,category,description,start,end,deadline,hours,location,lat,lng,radius,capacity,coordinator,status,created_at) VALUES('event','Test','Service','Test','2026-01-01','2026-01-02','2026-01-01',4,'Campus',19,72,250,10,'other','Ongoing','2026-01-01')")
   for uid in ['student','peer']:
@@ -57,8 +57,8 @@ class Deletion(unittest.TestCase):
   for kw in [{'email':'wrong@example.test'},{'password':'wrong'},{'reason':''}]:
    with self.assertRaises(sqlite3.IntegrityError):self.delete(**kw)
  def test_stale_admin_cannot_finish_delete(self):
-  self.db.execute("UPDATE users SET active=0 WHERE id='admin'")
-  with self.assertRaises(sqlite3.IntegrityError):self.delete()
+  self.db.execute("UPDATE users SET active=0 WHERE id='other'")
+  with self.assertRaises(sqlite3.IntegrityError):self.delete(actor='other')
  def test_last_admin_cannot_be_disabled(self):
   self.delete('other')
   with self.assertRaises(sqlite3.IntegrityError):self.db.execute("UPDATE users SET active=0 WHERE id='admin'")

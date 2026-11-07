@@ -1,15 +1,17 @@
-import {protectPlatformOwner} from './platform-core';
+import {protectPlatformOwner,platformOne} from './platform-core';
+import {protectAccount} from './permissions';
 import {blobOptions,storagePath,currentCollege} from './college';
 import {del,list} from '@vercel/blob';
 import {all,one,sql,id,now} from './db';
 import {passwordHash,constantEqual,rate} from './auth';
 import {AppError} from './errors';
 
-function admin(u:any){if(u.role!=='ADMIN'||!u.active)throw new AppError('Only active administrators can delete accounts.',403);}
+function admin(u:any){if(!['SUPER_ADMIN','ADMIN'].includes(u.role)||!u.active)throw new AppError('Only active administrators can delete accounts.',403);}
 export async function deletionSummary(u:any,targetId:string){
  admin(u);
- const target=await one("SELECT id,name,email,role FROM users WHERE id=? AND role IN ('ADMIN','FACULTY','VOLUNTEER','STUDENT')",targetId);
+ const target=await one("SELECT id,name,email,role,owner_proxy FROM users WHERE id=? AND role IN ('SUPER_ADMIN','ADMIN','FACULTY','VOLUNTEER','STUDENT')",targetId);
  if(!target)throw new AppError('Account not found.',404);
+ await protectAccount(u,target);
  if(target.id===u.id)throw new AppError('You cannot delete your own account.',409);
  const counts=await one(`SELECT
  (SELECT COUNT(*) FROM attendance WHERE user_id=?) attendance,
@@ -21,9 +23,10 @@ export async function deletionSummary(u:any,targetId:string){
 export async function deleteAccount(u:any,b:any){
  admin(u);if(currentCollege().id==='default')await protectPlatformOwner(u,String(b.id));await rate('delete-account-'+u.id,5);
  if(typeof b.id!=='string'||typeof b.email!=='string'||typeof b.password!=='string'||typeof b.reason!=='string'||b.reason.trim().length<1||b.reason.length>1000||b.password.length>128)throw new AppError('Enter the account email, your password and a deletion reason.');
- const current=await one("SELECT * FROM users WHERE id=? AND role='ADMIN' AND active=1",u.id);
- if(!current?.password||!constantEqual(await passwordHash(b.password,current.password.split(':')[0]),current.password))throw new AppError('Your administrator password is incorrect.',403);
- const summary=await deletionSummary(current,b.id);
+ const current=await one("SELECT * FROM users WHERE id=? AND role IN ('SUPER_ADMIN','ADMIN') AND active=1",u.id);
+ const verifier=u.isPlatformOwner?await platformOne('SELECT password FROM users WHERE id=?',u.platformOwnerId):current;
+ if(!current?.password||!verifier?.password||!constantEqual(await passwordHash(b.password,verifier.password.split(':')[0]),verifier.password))throw new AppError('Your administrator password is incorrect.',403);
+ const summary=await deletionSummary(u,b.id);
  if(b.email.trim().toLowerCase()!==summary.target.email.toLowerCase())throw new AppError('Type the exact email of the account being deleted.');
  await sql('INSERT INTO account_deletions(id,target,actor,confirmed_email,actor_password_hash,reason,created_at) VALUES (?,?,?,?,?,?,?)',id(),b.id,u.id,b.email.trim(),current.password,b.reason.trim(),now()).run();
  // Physical Blob removal is retriable and never part of the SQL transaction.

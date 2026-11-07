@@ -38,5 +38,9 @@
   {
     "name": "010_staff_profile_fields.sql",
     "checksum": "4dc75cf367dd1756cdd3ed099fcf68110997d6fefd64fdc17367dfe4e4d04703"
+  },
+  {
+    "name": "011_institute_super_admin.sql",
+    "checksum": "4ebbd26f3453181cc94de4956d774ff09a255907d793338b6ae1de4378c9efc4"
   }
 ]

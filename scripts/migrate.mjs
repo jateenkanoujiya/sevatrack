@@ -21,14 +21,14 @@ try{
  const today=new Date(),academicYear=today.getUTCMonth()>=6?today.getUTCFullYear():today.getUTCFullYear()-1;
  const settings={year1:120,year2:120,defaultGeofence:250,evidenceRequired:true,allowCancellation:true,academicStart:`${academicYear}-07-01`,academicEnd:`${academicYear+1}-06-30`,institution:'Your institution',unit:'NSS Unit 01'};
  await client.execute({sql:'INSERT OR IGNORE INTO settings (id,value) VALUES (?,?)',args:['program',JSON.stringify(settings)]});
- const admin=await client.execute("SELECT id FROM users WHERE role='ADMIN' LIMIT 1");
+ const admin=await client.execute("SELECT id FROM users WHERE role IN ('SUPER_ADMIN','ADMIN') LIMIT 1");
  if(!admin.rows.length){
   const prefix=collegeId==='default'?'SEVATRACK':`SEVATRACK_${collegeId.toUpperCase().replaceAll('-','_')}`;
   const email=process.env[prefix+'_ADMIN_EMAIL']?.trim().toLowerCase(),password=process.env[prefix+'_ADMIN_PASSWORD'];
   if(email&&password){
    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||password.length<16||password.length>128)throw new Error('Initial administrator needs a valid email and a password of 16–128 characters.');
    const salt=randomUUID(),hash=salt+':'+pbkdf2Sync(password,salt,100000,32,'sha256').toString('hex');
-   await client.execute({sql:"INSERT INTO users (id,email,name,role,password,created_at) SELECT ?,?,?,'ADMIN',?,? WHERE NOT EXISTS(SELECT 1 FROM users WHERE role='ADMIN')",args:[randomUUID(),email,process.env[prefix+'_ADMIN_NAME']||'NSS Administrator',hash,new Date().toISOString()]});
+   await client.execute({sql:"INSERT INTO users (id,email,name,role,password,created_at) SELECT ?,?,?,'SUPER_ADMIN',?,? WHERE NOT EXISTS(SELECT 1 FROM users WHERE role IN ('SUPER_ADMIN','ADMIN'))",args:[randomUUID(),email,process.env[prefix+'_ADMIN_NAME']||'NSS Administrator',hash,new Date().toISOString()]});
    console.log('Initial administrator created. Remove bootstrap password environment variable after verifying login.');
   }else console.log('Administrator setup pending: add SEVATRACK_ADMIN_EMAIL and SEVATRACK_ADMIN_PASSWORD, then redeploy.');
  }
@@ -48,10 +48,11 @@ if(process.env.SEVATRACK_PLATFORM_ENABLED==='1'){
   await master.batch(schema.split('--> statement-breakpoint').map(x=>x.trim()).filter(Boolean),'write');
   const existing=await master.execute('SELECT user_id FROM platform_owner WHERE singleton=1');
   if(!existing.rows.length){
-   const owner=(await master.execute({sql:"SELECT id FROM users WHERE email=? AND role='ADMIN' AND active=1",args:[(process.env.SEVATRACK_PLATFORM_OWNER_EMAIL||'').toLowerCase()]})).rows[0];
+   const owner=(await master.execute({sql:"SELECT id FROM users WHERE email=? AND role IN ('SUPER_ADMIN','ADMIN') AND active=1",args:[(process.env.SEVATRACK_PLATFORM_OWNER_EMAIL||'').toLowerCase()]})).rows[0];
    if(!owner)throw new Error('Configure the email of an existing active administrator as SEVATRACK_PLATFORM_OWNER_EMAIL.');
    await master.execute({sql:'INSERT OR IGNORE INTO platform_owner VALUES(1,?)',args:[owner.id]});
   }
+  await master.execute("UPDATE users SET role='SUPER_ADMIN' WHERE id=(SELECT user_id FROM platform_owner WHERE singleton=1) AND role='ADMIN'");
   // Every managed database receives the same checksum-verified schema on deployment.
   const tenants=(await master.execute("SELECT id,credentials FROM platform_institutes WHERE credentials IS NOT NULL AND status IN ('ACTIVE','SUSPENDED')")).rows;
   for(const tenant of tenants){const c=openTenant(tenant.id,tenant.credentials),client=createClient(c);try{await migrateTenant(client,tenant)}finally{client.close()}}

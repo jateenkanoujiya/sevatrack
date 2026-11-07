@@ -2,12 +2,12 @@ import {all,one,db,insert,id,now,audit,notice} from './db';
 import {AppError} from './errors';
 export const HISTORICAL_DEADLINE='2026-10-07T18:30:00.000Z';
 export function canEditHistorical(u:any,time=Date.now()){
- return !!u.active&&(u.role==='ADMIN'||u.role==='FACULTY'&&time<Date.parse(HISTORICAL_DEADLINE));
+ return !!u.active&&(['SUPER_ADMIN','ADMIN'].includes(u.role)||u.role==='FACULTY'&&time<Date.parse(HISTORICAL_DEADLINE));
 }
 function text(v:any,label:string,max:number){if(typeof v!=='string'||!v.trim()||v.trim().length>max)throw new AppError(`${label} is required (maximum ${max} characters).`);return v.trim();}
 export async function historicalBalances(u:any,student:string){
  if(['STUDENT','VOLUNTEER'].includes(u.role)&&u.id!==student)throw new AppError('This student record is restricted.',403);
- if(!['ADMIN','FACULTY','VOLUNTEER','STUDENT'].includes(u.role))throw new AppError('Access denied.',403);
+ if(!['SUPER_ADMIN','ADMIN','FACULTY','VOLUNTEER','STUDENT'].includes(u.role))throw new AppError('Access denied.',403);
  if(!await one("SELECT id FROM users WHERE id=? AND role IN ('STUDENT','VOLUNTEER')",student))throw new AppError('Student not found.',404);
  return {canEdit:canEditHistorical(u),deadline:HISTORICAL_DEADLINE,rows:await all('SELECT h.*,u.name actor_name FROM historical_hours h LEFT JOIN users u ON u.id=h.actor WHERE h.user_id=? ORDER BY h.revision DESC,h.year',student)};
 }

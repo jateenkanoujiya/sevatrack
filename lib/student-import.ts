@@ -6,7 +6,7 @@ export function mobileNumber(value:any){const text=String(value??'').trim().repl
 function required(value:any,label:string,max=150){if(typeof value!=='string'||!value.trim()||value.trim().length>max)throw new AppError(`${label} is required (maximum ${max} characters).`);return value.trim()}
 export function importPassword(){const college=currentCollege().id;const key=college==='default'?'SEVATRACK_IMPORT_PASSWORD':`SEVATRACK_${college.toUpperCase().replaceAll('-','_')}_IMPORT_PASSWORD`;const password=process.env[key];if(!password||password.length<12||password.length>128)throw new AppError('Student import password is not configured. Ask the deployment administrator to configure the private import password.',503);return password}
 export async function inspectStudentImport(u:any,rows:any){
- if(u.role!=='ADMIN'||!u.active)throw new AppError('Only administrators can import students.',403);
+ if(!['SUPER_ADMIN','ADMIN'].includes(u.role)||!u.active)throw new AppError('Only administrators can import students.',403);
  if(!Array.isArray(rows)||!rows.length||rows.length>200)throw new AppError('Import 1–200 students per file.');
  const users=await all('SELECT id,email,nss_id,role FROM users');const byEmail=new Map(users.map(x=>[x.email.toLowerCase(),x])),byNss=new Map(users.filter(x=>x.nss_id).map(x=>[x.nss_id.toLowerCase(),x]));
  const emails=new Set(),ids=new Set(),results=[];

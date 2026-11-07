@@ -44,7 +44,7 @@ export async function finishPhoto(u:any,pid:string){
  try{await db().batch([
   insert('evidence',{id:pid,attendance_id:a.id,key:ticket.path,mime:ticket.mime,location:ticket.location,captured_at:null,status:'PENDING',remarks:'',created_at:now()}),
   sql("UPDATE attendance SET status=CASE WHEN status IN ('CHECKED_OUT','EVIDENCE_PENDING') THEN 'PENDING_REVIEW' ELSE status END WHERE id=?",a.id),
-  sql("INSERT INTO notifications (id,user_id,title,body,read,created_at) SELECT lower(hex(randomblob(16))),id,'Photo evidence submitted',?,0,? FROM users WHERE role='ADMIN' AND active=1 AND EXISTS(SELECT 1 FROM attendance WHERE id=? AND original_out IS NOT NULL)",'Attendance photo ready for GPS and evidence review.',now(),a.id),
+  sql("INSERT INTO notifications (id,user_id,title,body,read,created_at) SELECT lower(hex(randomblob(16))),id,'Photo evidence submitted',?,0,? FROM users WHERE role IN ('SUPER_ADMIN','ADMIN') AND active=1 AND EXISTS(SELECT 1 FROM attendance WHERE id=? AND original_out IS NOT NULL)",'Attendance photo ready for GPS and evidence review.',now(),a.id),
   audit(u,'Photo submitted','evidence',pid,null,{attendance:a.id},'Participation evidence'),
   sql('DELETE FROM upload_intents WHERE id=?',pid)
  ]);}catch(error){if(!await one('SELECT id FROM evidence WHERE id=? AND attendance_id=?',pid,a.id))throw error;}

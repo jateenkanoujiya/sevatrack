@@ -15,7 +15,7 @@ async function limit(key:string,max:number){const slot=Math.floor(Date.now()/900
 const audit=(actor:string,institute:string|null,action:string,reason:string)=>({sql:'INSERT INTO platform_audit VALUES(?,?,?,?,?,?)',args:[randomUUID(),actor,institute,action,reason,now()]});
 async function owner(request:Request){
  const token=cookie(request,'seva_platform_session');if(!token)throw new AppError('Sign in as the platform owner.',401);
- const row=await platformOne("SELECT u.id,u.name,u.email FROM platform_sessions s JOIN platform_owner o ON o.user_id=s.user_id JOIN users u ON u.id=o.user_id WHERE s.id=? AND s.expires>? AND u.active=1 AND u.role='ADMIN'",await digest(token),now());
+ const row=await platformOne("SELECT u.id,u.name,u.email FROM platform_sessions s JOIN platform_owner o ON o.user_id=s.user_id JOIN users u ON u.id=o.user_id WHERE s.id=? AND s.expires>? AND u.active=1 AND u.role IN ('SUPER_ADMIN','ADMIN')",await digest(token),now());
  if(!row)throw new AppError('Your owner session expired. Sign in again.',401);return row;
 }
 async function approve(actor:any,b:any){
@@ -45,9 +45,9 @@ async function approve(actor:any,b:any){
    const settings={year1:120,year2:120,defaultGeofence:250,evidenceRequired:true,allowCancellation:true,academicStart:`${year}-07-01`,academicEnd:`${year+1}-06-30`,institution:row.name,unit:'NSS Unit 01'};
    await db.batch([
     {sql:'INSERT OR IGNORE INTO settings(id,value) VALUES(?,?)',args:['program',JSON.stringify(settings)]},
-    {sql:"INSERT OR IGNORE INTO users(id,email,name,role,active,department,batch,year,roll,password,mobile,password_change_required,created_at) VALUES(?,?,?,'ADMIN',1,'NSS Unit','',0,'',?,?,0,?)",args:['institute-admin-'+row.id,row.email,row.contact_name,row.password_hash,row.mobile,now()]}
+    {sql:"INSERT OR IGNORE INTO users(id,email,name,role,active,department,batch,year,roll,password,mobile,password_change_required,created_at) VALUES(?,?,?,'SUPER_ADMIN',1,'NSS Unit','',0,'',?,?,0,?)",args:['institute-admin-'+row.id,row.email,row.contact_name,row.password_hash,row.mobile,now()]}
    ],'write');
-   if(!(await db.execute({sql:"SELECT id FROM users WHERE id=? AND role='ADMIN' AND active=1",args:['institute-admin-'+row.id]})).rows.length)throw new Error('Initial administrator is missing');
+   if(!(await db.execute({sql:"SELECT id FROM users WHERE id=? AND role IN ('SUPER_ADMIN','ADMIN') AND active=1",args:['institute-admin-'+row.id]})).rows.length)throw new Error('Initial administrator is missing');
   }finally{db.close()}
   await platformDB().batch([
    {sql:"UPDATE platform_institutes SET status='ACTIVE',approved_at=?,updated_at=?,lease=NULL,lease_until=NULL WHERE id=? AND lease=?",args:[now(),now(),row.id,lease]},
@@ -112,23 +112,46 @@ export async function platformRequest(request:Request,action:string){
   }
   if(action==='enter'){
    let id='';if(b.slug!=='default'){const row=await platformOne("SELECT id FROM platform_institutes WHERE slug=? AND status='ACTIVE'",slug(b.slug));if(!row)throw new AppError('This institute is not yet active.',403);id=row.id}
-   const result=response({href:'/'});result.headers.append('Set-Cookie',sessionCookie('seva_institute',id,id?2592000:0));result.headers.append('Set-Cookie',sessionCookie('seva_session','',0));return result;
+   const result=response({href:'/'});result.headers.append('Set-Cookie',sessionCookie('seva_institute',id,id?2592000:0));result.headers.append('Set-Cookie',sessionCookie('seva_session','',0));result.headers.append('Set-Cookie',sessionCookie('seva_owner_access','',0));return result;
   }
   if(action==='login'){
    const email=text(b.email,'email',200).toLowerCase();await limit('owner-login:'+ip+':'+await digest(email),10);
-   const row=await platformOne("SELECT u.* FROM users u JOIN platform_owner o ON u.id=o.user_id WHERE o.singleton=1 AND u.email=? AND u.role='ADMIN' AND u.active=1",email);
+   const row=await platformOne("SELECT u.* FROM users u JOIN platform_owner o ON u.id=o.user_id WHERE o.singleton=1 AND u.email=? AND u.role IN ('SUPER_ADMIN','ADMIN') AND u.active=1",email);
    const password=passwordValue(b.password);
    if(!row?.password||!constantEqual(await passwordHash(password,row.password.split(':')[0]),row.password))throw new AppError('Owner email or password is incorrect.',401);
    const token=randomBytes(32).toString('hex');await platformQuery('INSERT INTO platform_sessions VALUES(?,?,?)',await digest(token),row.id,new Date(Date.now()+28800000).toISOString());const result=response({owner:{id:row.id,name:row.name,email:row.email}});result.headers.append('Set-Cookie',sessionCookie('seva_platform_session',token));return result;
   }
   const u=await owner(request);await limit('owner:'+u.id,100);
-  if(action==='logout'){await platformQuery('DELETE FROM platform_sessions WHERE id=?',await digest(cookie(request,'seva_platform_session')||''));const result=response({message:'Signed out.'});result.headers.append('Set-Cookie',sessionCookie('seva_platform_session','',0));return result}
+  if(action==='logout'){await platformQuery('DELETE FROM platform_sessions WHERE id=?',await digest(cookie(request,'seva_platform_session')||''));const result=response({message:'Signed out.'});result.headers.append('Set-Cookie',sessionCookie('seva_platform_session','',0));result.headers.append('Set-Cookie',sessionCookie('seva_owner_access','',0));return result}
+  if(action==='manage'){
+   const reason=text(b.reason,'workspace access reason',1000),isDefault=b.id==='default';
+   const institute=isDefault?null:await platformOne("SELECT * FROM platform_institutes WHERE id=? AND status='ACTIVE'",text(b.id,'institute ID',64));
+   if(!isDefault&&!institute)throw new AppError('Activate this institute before opening its workspace.',403);
+   const connection=isDefault?{url:process.env.TURSO_DATABASE_URL!,authToken:process.env.TURSO_AUTH_TOKEN!}:openTenant(institute.id,institute.credentials);
+   const client=createClient(connection),proxyId=isDefault?u.id:'platform-owner-'+u.id;
+   try{
+    if(!isDefault)await client.execute({sql:"INSERT INTO users(id,email,name,role,active,department,batch,year,roll,password,owner_proxy,created_at) VALUES(?,?,?,'SUPER_ADMIN',1,'Platform','',0,'',?,1,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,active=1",args:[proxyId,'platform-owner-'+u.id+'@owner.invalid','Platform owner · '+u.name,'owner-only:'+randomBytes(32).toString('hex'),now()]});
+    await client.execute({sql:'INSERT INTO audit_logs(id,actor,role,action,entity,entity_id,old_value,new_value,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',args:[randomUUID(),proxyId,'OWNER','Owner workspace opened','institute',isDefault?'default':institute.id,'null','{}',reason,now()]});
+   }finally{client.close()}
+   const token=randomBytes(32).toString('hex'),session=await digest(cookie(request,'seva_platform_session')!);
+   await platformDB().batch([
+    {sql:'DELETE FROM platform_workspace_access WHERE session_id=? OR expires<?',args:[session,now()]},
+    {sql:'INSERT INTO platform_workspace_access VALUES(?,?,?,?,?)',args:[await digest(token),session,isDefault?'default':'institute-'+institute.id,proxyId,new Date(Date.now()+14400000).toISOString()]},
+    audit(u.id,institute?.id||null,'Owner workspace opened',reason)
+   ],'write');
+   const result=response({href:'/'});result.headers.append('Set-Cookie',sessionCookie('seva_owner_access',token,14400));result.headers.append('Set-Cookie',sessionCookie('seva_institute',institute?.id||'',institute?2592000:0));result.headers.append('Set-Cookie',sessionCookie('seva_session','',0));return result;
+  }
+  if(action==='leave-workspace'){
+   await platformQuery('DELETE FROM platform_workspace_access WHERE id=? AND session_id=?',await digest(cookie(request,'seva_owner_access')||''),await digest(cookie(request,'seva_platform_session')||''));
+   const result=response({href:'/platform'});for(const name of ['seva_owner_access','seva_session','seva_institute'])result.headers.append('Set-Cookie',sessionCookie(name,'',0));return result;
+  }
   if(action==='approve')return response(await approve(u,b));
   if(['reject','suspend','resume'].includes(action)){
    const id=text(b.id,'application ID',64),reason=text(b.reason,'decision reason',1000),row=await platformOne('SELECT * FROM platform_institutes WHERE id=?',id);
    const allowed=action==='reject'?['PENDING','SETUP_FAILED']:action==='suspend'?['ACTIVE']:['SUSPENDED'];
    if(!row||!allowed.includes(row.status))throw new AppError('This action is not available for the current institute status.',409);
    // Clear existing sessions before resuming; suspending takes effect on every request.
+   if(action==='suspend'||action==='resume')await platformQuery('DELETE FROM platform_workspace_access WHERE institute_id=?','institute-'+id);
    if(action==='resume'){const c=openTenant(row.id,row.credentials),client=createClient(c);try{await client.execute('DELETE FROM sessions')}finally{client.close()}}
    const target=action==='reject'?'REJECTED':action==='suspend'?'SUSPENDED':'ACTIVE';
    await platformDB().batch([{sql:'UPDATE platform_institutes SET status=?,decision_reason=?,reviewed_by=?,updated_at=? WHERE id=? AND status=?',args:[target,reason,u.id,now(),id,row.status]},audit(u.id,id,'Institute '+action,reason)],'write');

@@ -14,11 +14,13 @@ class StaffProfiles(unittest.TestCase):
   for role in ['ADMIN','FACULTY','STUDENT','VOLUNTEER']:
    db.execute("INSERT INTO users(id,email,name,role,batch,year,roll,nss_id,password,created_at) VALUES(?,?,?,?,?,2,?,?,?,?)",(role,role+'@example.test',role,role,'2026–2028','R-'+role,'N-'+role,'unchanged-password','2026-01-01'))
   before={r:db.execute('SELECT * FROM users WHERE id=?',(r,)).fetchone() for r in ['STUDENT','VOLUNTEER']}
-  apply(files[-1])
+  apply(next(f for f in files if f.name.startswith('010')))
+  for f in files:
+   if f.name>'010_staff_profile_fields.sql': apply(f)
   for role in ['ADMIN','FACULTY']:
    self.assertEqual(db.execute('SELECT batch,year,roll,nss_id,password FROM users WHERE id=?',(role,)).fetchone(),('',0,'',None,'unchanged-password'))
    self.assertEqual(db.execute("SELECT COUNT(*) FROM audit_logs WHERE entity_id=? AND action='Staff profile fields cleared'",(role,)).fetchone()[0],1)
-  for role,record in before.items(): self.assertEqual(db.execute('SELECT * FROM users WHERE id=?',(role,)).fetchone(),record)
+  for role,record in before.items(): self.assertEqual(db.execute('SELECT * FROM users WHERE id=?',(role,)).fetchone()[:len(record)],record)
   db.execute("UPDATE users SET batch='stale',year=1,roll='stale' WHERE id='FACULTY'")
   self.assertEqual(db.execute("SELECT batch,year,roll FROM users WHERE id='FACULTY'").fetchone(),('',0,''))
   db.execute("INSERT INTO users(id,email,name,role,created_at) VALUES('bootstrap','bootstrap@example.test','Bootstrap','ADMIN','2026-01-01')")

@@ -12,8 +12,8 @@ async function main(){
  Object.assign(process.env,{NODE_ENV:'test',SEVATRACK_TEST_TENANTS:'1',SEVATRACK_PLATFORM_ENABLED:'1',TURSO_DATABASE_URL:'file:'+path.join(dir,'master.db'),TURSO_AUTH_TOKEN:'test',SEVATRACK_ADMIN_EMAIL:'owner@example.test',SEVATRACK_ADMIN_PASSWORD:password,SEVATRACK_PLATFORM_OWNER_EMAIL:'owner@example.test',SEVATRACK_TENANT_KEY:randomBytes(32).toString('hex'),BLOB_READ_WRITE_TOKEN:'vercel_blob_rw_TEST_private'});delete process.env.SEVATRACK_COLLEGES;delete process.env.VERCEL_ENV;
  const migrate=spawnSync(process.execPath,['scripts/migrate.mjs'],{env:process.env,encoding:'utf8'});assert.equal(migrate.status,0,migrate.stderr);
  const master=createClient({url:process.env.TURSO_DATABASE_URL,authToken:'test'}),{platformRequest}=load('lib/platform.ts'),api=load('app/api/[...path]/route.ts');let checks=0;
- async function call(action,b,cookie='',expected=200,headers={}){const r=new Request('https://seva.example.test/api/platform/'+action,{method:b===undefined?'GET':'POST',headers:{origin:'https://seva.example.test',cookie,...headers},body:b===undefined?undefined:JSON.stringify(b)});const response=await platformRequest(r,action.split('?')[0]);const d=await response.json();assert.equal(response.status,expected,action+': '+JSON.stringify(d));checks++;return {d,cookie:response.headers.get('set-cookie')?.split(';')[0]}}
- async function app(action,b,cookie='',expected=200,headers={}){const r=new Request('https://seva.example.test/api/'+action,{method:b===undefined?'GET':'POST',headers:{origin:'https://seva.example.test',cookie,...headers},body:b===undefined?undefined:JSON.stringify(b)});const response=await api[b===undefined?'GET':'POST'](r),d=await response.json();assert.equal(response.status,expected,action+': '+JSON.stringify(d));checks++;return {d,cookie:response.headers.get('set-cookie')?.split(';')[0]}}
+ async function call(action,b,cookie='',expected=200,headers={}){const r=new Request('https://seva.example.test/api/platform/'+action,{method:b===undefined?'GET':'POST',headers:{origin:'https://seva.example.test',cookie,...headers},body:b===undefined?undefined:JSON.stringify(b)});const response=await platformRequest(r,action.split('?')[0]);const d=await response.json();assert.equal(response.status,expected,action+': '+JSON.stringify(d));checks++;return {d,cookie:response.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ')}}
+ async function app(action,b,cookie='',expected=200,headers={}){const r=new Request('https://seva.example.test/api/'+action,{method:b===undefined?'GET':'POST',headers:{origin:'https://seva.example.test',cookie,...headers},body:b===undefined?undefined:JSON.stringify(b)});const response=await api[b===undefined?'GET':'POST'](r),d=await response.json();assert.equal(response.status,expected,action+': '+JSON.stringify(d));checks++;return {d,cookie:response.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ')}}
  const owner=(await call('login',{email:'owner@example.test',password})).cookie;
  await call('applications',undefined,'',401);
  await call('register',{},'',403,{origin:'https://attacker.example'});
@@ -57,7 +57,59 @@ async function main(){
  const college=load('lib/college.ts');let ap,bp;
  await college.withCollegeRequest(new Request('https://seva.example.test',{headers:{cookie:acookie}}),async()=>{ap=college.storagePath('evidence/same-user/photo');return new Response()});
  await college.withCollegeRequest(new Request('https://seva.example.test',{headers:{cookie:bcookie}}),async()=>{bp=college.storagePath('evidence/same-user/photo');return new Response()});assert.notEqual(ap,bp);assert(ap.startsWith('institutes/institute-'+alpha.id+'/'));
+ // Institute Super Admins control settings; all lower roles are denied server-side.
+ assert.equal(astate.d.user.role,'SUPER_ADMIN');assert.equal(bstate.d.user.role,'SUPER_ADMIN');
+ const superId=astate.d.user.id,settings={...astate.d.settings,reason:'Institute leadership test'};
+ await app('settings',settings,a);
+ await app('catalog',{kind:'department',name:'Private alpha department'},a);
+ assert(!(await app('state',undefined,b)).d.catalogs.some(x=>x.name==='Private alpha department'));
+ let regular;
+ for(const role of ['ADMIN','FACULTY','VOLUNTEER','STUDENT']){
+  const person={...student,name:role,email:role.toLowerCase()+'@isolation.test',nss_id:'test-'+role,role};
+  const created=(await app('user',person,a)).d;
+  const reset=(await app('recovery',{user:created.id},a)).d;
+  await app('auth',{action:'reset',token:reset.token,password},acookie);
+  const signed=(await app('auth',{action:'login',email:person.email,password},acookie)).cookie;
+  const cookies=acookie+'; '+signed;
+  for(const endpoint of ['settings','catalog','delete-catalog','delete-batch'])await app(endpoint,{},cookies,403);
+  await app('system-health',undefined,cookies,403);
+  await call('manage',{id:beta.id,reason:'Cross-institute attempt'},cookies,401);
+  if(role==='ADMIN'){
+   regular={id:created.id,cookie:cookies,person};
+   await app('user',{...person,id:created.id,role:'SUPER_ADMIN'},cookies,403);
+   await app('user',{...person,email:'new-admin@isolation.test',role:'ADMIN'},cookies,403);
+   await app('user',{...person,id:superId,role:'ADMIN'},cookies,403);
+   await app('recovery',{user:superId},cookies,403);
+   await app('delete-account',{id:superId,email:'coordinator@example.test',password,reason:'Attempt'},cookies,403);
+  }
+ }
+ await app('user',{...regular.person,role:'SUPER_ADMIN',id:regular.id},a,403);
+ // A valid owner session explicitly opens one workspace, with auditable attribution.
+ await call('manage',{id:alpha.id,reason:''},owner,400);
+ const support=(await call('manage',{id:alpha.id,reason:'Review institute settings'},owner)).cookie+'; '+owner;
+ const supportState=(await app('state',undefined,support)).d;
+ assert.equal(supportState.user.isPlatformOwner,true);assert.equal(supportState.user.role,'SUPER_ADMIN');
+ assert(supportState.institute.id.endsWith(alpha.id));assert(!supportState.users.some(x=>x.id===supportState.user.id));
+ await app('state',undefined,support.replace(alpha.id,beta.id),401);
+ await app('state',undefined,support.replace(owner,''),401);
+ await app('settings',{...settings,unit:'Owner reviewed unit'},support);
+ assert.equal((await app('state',undefined,b)).d.settings.unit,'NSS Unit 01');
+ assert((await app('audit',undefined,support)).d.some(x=>x.role==='OWNER'&&x.action==='Program settings updated'));
+ await app('recovery',{user:supportState.user.id},a,403);
+ await app('user',{...regular.person,id:regular.id,role:'SUPER_ADMIN'},support);
+ // The owner can transfer leadership, but cannot leave an institute without a Super Admin.
+ await app('user',{...regular.person,id:regular.id,role:'ADMIN'},support);
+ await app('user',{name:'Coordinator',email:'coordinator@example.test',role:'ADMIN',active:true,department:'NSS',id:superId,reason:'Attempt to remove final Super Admin'},support,409);
+ const disposable=(await app('user',{...student,email:'disposable@test.example',nss_id:'temporary',name:'Disposable'},support)).d;
+ await app('delete-account',{id:disposable.id,email:'disposable@test.example',password,reason:'Remove isolated test account'},support);
+ const supportB=(await call('manage',{id:beta.id,reason:'Review second institute'},owner)).cookie+'; '+owner;
+ await app('state',undefined,support,401);
+ assert.equal((await app('state',undefined,supportB)).d.institute.id,'institute-'+beta.id);
+ await call('leave-workspace',{},supportB);
+ await app('state',undefined,supportB,401);
+ const suspendedSupport=(await call('manage',{id:alpha.id,reason:'Check suspension'},owner)).cookie+'; '+owner;
  await call('suspend',{id:alpha.id,reason:'Review requested'},owner);
+ await app('state',undefined,suspendedSupport,403);
  await app('state',undefined,a,403);await call('enter',{slug:'alpha-college'},'',403);
  await call('resume',{id:alpha.id,reason:'Review completed'},owner);
  await app('state',undefined,a,401);
@@ -78,7 +130,9 @@ async function main(){
  assert(!stored.includes(aurl));const {openTenant}=require('../lib/tenant-secrets.mjs');assert.throws(()=>openTenant(beta.id,stored));
  assert((await call('audit',undefined,owner)).d.rows.some(x=>x.action==='Institute approved'));
  const rerun=spawnSync(process.execPath,['scripts/migrate.mjs'],{env:process.env,encoding:'utf8'});assert.equal(rerun.status,0,rerun.stderr);
- const client=createClient({url:aurl});assert.equal((await client.execute('SELECT COUNT(*) n FROM users WHERE role=\'STUDENT\'')).rows[0].n,1);client.close();
+ const client=createClient({url:aurl});assert.equal((await client.execute('SELECT COUNT(*) n FROM users WHERE role=\'STUDENT\'')).rows[0].n,2);client.close();
+ const logoutSupport=(await call('manage',{id:beta.id,reason:'Session revocation test'},owner)).cookie+'; '+owner;
+ await call('logout',{},owner);await app('state',undefined,logoutSupport,401);
  master.close();console.log(`${checks} institute portal requests passed: registration, pending gates, owner-only approval, separate databases, same-email isolation, cross-session denial, storage namespaces, suspension, session revocation, owner protection and migration persistence.`);
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>fs.rmSync(dir,{recursive:true,force:true}));

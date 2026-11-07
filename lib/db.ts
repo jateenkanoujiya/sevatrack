@@ -32,5 +32,5 @@ export const sql=(s:string,...v:any[])=>db().prepare(s).bind(...v);
 export async function all(s:string,...v:any[]){return (await sql(s,...v).all()).results as any[];}
 export async function one(s:string,...v:any[]){return await sql(s,...v).first() as any;}
 export function insert(table:string,data:Record<string,any>){const k=Object.keys(data);return sql(`INSERT INTO ${table} (${k.join(',')}) VALUES (${k.map(()=>'?').join(',')})`,...Object.values(data));}
-export function audit(u:any,action:string,entity:string,entityId:string,oldValue:any,newValue:any,reason:string){return insert('audit_logs',{id:id(),actor:u.id,role:u.role,action,entity,entity_id:entityId,old_value:JSON.stringify(oldValue),new_value:JSON.stringify(newValue),reason,created_at:now()});}
+export function audit(u:any,action:string,entity:string,entityId:string,oldValue:any,newValue:any,reason:string){return insert('audit_logs',{id:id(),actor:u.id,role:u.isPlatformOwner?'OWNER':u.role,action,entity,entity_id:entityId,old_value:JSON.stringify(oldValue),new_value:JSON.stringify(newValue),reason,created_at:now()});}
 export function notice(user:string,title:string,body:string){return insert('notifications',{id:id(),user_id:user,title,body,read:0,created_at:now()});}

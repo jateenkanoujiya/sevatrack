@@ -5,7 +5,7 @@ type Row=Record<string,any>;
 const stamp=(s:string)=>new Date(s).toLocaleString('en-IN');
 const local=(s:string)=>s?new Date(Date.parse(s)-new Date(s).getTimezoneOffset()*60000).toISOString().slice(0,16):'';
 export default function PastEvents({data,request,refresh,parseCSV}:{data:Row;request:(path:string,body?:any)=>Promise<any>;refresh:()=>Promise<any>;parseCSV:(s:string)=>string[][]}){
- const admin=data.user.role==='ADMIN';
+ const admin=['SUPER_ADMIN','ADMIN'].includes(data.user.role);
  const [query,setQuery]=useState(''),[page,setPage]=useState(1),[list,setList]=useState<Row|null>(null),[selected,setSelected]=useState(''),[detail,setDetail]=useState<Row|null>(null),[editing,setEditing]=useState<Row|null>(null),[attempt,setAttempt]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
  useEffect(()=>{let live=true;setList(null);const timer=setTimeout(()=>{request('past-events?'+new URLSearchParams({q:query,page:String(page)})).then(r=>{if(live)setList(r)}).catch(e=>{if(live)setError(e.message)})},200);return()=>{live=false;clearTimeout(timer)}},[query,page,attempt,request]);
  useEffect(()=>{let live=true;setDetail(null);if(selected)request('past-event?id='+encodeURIComponent(selected)).then(r=>{if(live)setDetail(r)}).catch(e=>{if(live)setError(e.message)});return()=>{live=false}},[selected,attempt,request]);

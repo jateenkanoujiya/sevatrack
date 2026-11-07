@@ -17,7 +17,7 @@ try {
   check(result.rows[0]?.checksum===hash,`Applied migration ${name}`);
  }
  const queries=[
-  ['Active administrator',"SELECT COUNT(*) n FROM users WHERE role='ADMIN' AND active=1",n=>n>0],
+  ['Active administrator',"SELECT COUNT(*) n FROM users WHERE role IN ('SUPER_ADMIN','ADMIN') AND active=1",n=>n>0],
   ['Program settings',"SELECT COUNT(*) n FROM settings WHERE id='program' AND json_valid(value)",n=>n===1],
   ['Ledger identity',"SELECT COUNT(*) n FROM hour_ledger l JOIN attendance a ON a.id=l.attendance_id WHERE l.user_id!=a.user_id OR l.year!=a.year",n=>n===0],
   ['Attendance hour balances',"SELECT COUNT(*) n FROM (SELECT a.id,a.status,COALESCE(SUM(l.delta),0) total FROM attendance a LEFT JOIN hour_ledger l ON l.attendance_id=a.id GROUP BY a.id HAVING total < -0.005 OR total > 24.005 OR (a.status NOT IN ('APPROVED','PARTIAL') AND ABS(total)>0.005))",n=>n===0],

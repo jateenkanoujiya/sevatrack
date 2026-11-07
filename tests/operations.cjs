@@ -21,7 +21,7 @@ function run(command,args,code=0){const r=spawnSync(command,args,{env,encoding:'
  run(python,['scripts/restore-backup.py',backup,restored],1);
  const restore=createClient({url:'file:'+restored});
  assert.equal((await restore.execute("SELECT COUNT(*) n FROM catalogs WHERE id='preserve'")).rows[0].n,1);
- assert.equal((await restore.execute("SELECT COUNT(*) n FROM users WHERE role='ADMIN'")).rows[0].n,1);
+ assert.equal((await restore.execute("SELECT COUNT(*) n FROM users WHERE role='SUPER_ADMIN'")).rows[0].n,1);
  assert.equal((await restore.execute("SELECT COUNT(*) n FROM sqlite_master WHERE type='trigger'")).rows[0].n,(await client.execute("SELECT COUNT(*) n FROM sqlite_master WHERE type='trigger'")).rows[0].n);
  restore.close();
  await client.execute("UPDATE seva_migrations SET checksum='tampered' WHERE name=(SELECT MIN(name) FROM seva_migrations)");
