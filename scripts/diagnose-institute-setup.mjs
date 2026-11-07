@@ -13,8 +13,10 @@ try{
    if(row.credentials){stage='decrypt';connection=openTenant(row.id,row.credentials)}
    else{
     stage='provider-lookup';
-    const base='https://api.turso.tech/v1/organizations/'+encodeURIComponent(process.env.SEVATRACK_TURSO_ORGANIZATION)+'/databases/seva-'+row.id.replaceAll('-','');
-    const headers={Authorization:'Bearer '+process.env.SEVATRACK_TURSO_API_TOKEN};
+    const raw=process.env.SEVATRACK_TURSO_API_TOKEN||'',token=raw.trim();
+    report({index,stage,tokenPresent:!!token,tokenOuterWhitespace:raw!==token,tokenInternalWhitespace:/\s/.test(token),tokenNonAscii:/[^\x21-\x7e]/.test(token),tokenQuoted:/^["']|["']$/.test(token),orgValid:/^[a-z0-9-]+$/.test((process.env.SEVATRACK_TURSO_ORGANIZATION||'').trim()),groupValid:/^[a-z0-9-]+$/.test((process.env.SEVATRACK_TURSO_GROUP||'').trim())});
+    const base='https://api.turso.tech/v1/organizations/'+encodeURIComponent((process.env.SEVATRACK_TURSO_ORGANIZATION||'').trim())+'/databases/seva-'+row.id.replaceAll('-','');
+    const headers={Authorization:'Bearer '+token};
     const r=await fetch(base,{headers,signal:AbortSignal.timeout(15000)});
     if(!r.ok){report({index,stage,status:r.status});continue}
     const data=await r.json(),host=data.database?.Hostname||data.database?.hostname;
@@ -29,6 +31,6 @@ try{
     const objects=(await db.execute("SELECT name,type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name")).rows;
     report({index,stage,checkpointSaved:!!row.credentials,objects});
    }finally{db.close()}
-  }catch(e){report({index,stage,errorName:e.name,errorCode:e.code||e.cause?.code||'unknown'})}
+  }catch(e){report({index,stage,errorName:e.name,errorCode:e.code||e.cause?.code||'unknown',errorKind:/header/i.test(e.message)?'invalid-header':/fetch failed/i.test(e.message)?'fetch-failed':/ByteString/i.test(e.message)?'non-ascii-header':'other'})}
  }
 }catch(e){report({stage,errorName:e.name,errorCode:e.code||'unknown'})}finally{master.close()}
