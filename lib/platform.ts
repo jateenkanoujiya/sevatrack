@@ -111,7 +111,8 @@ export async function platformRequest(request:Request,action:string){
    return response({slug:row.slug,name:row.name,status:row.status,reason:['REJECTED','SUSPENDED'].includes(row.status)?row.decision_reason:'',message:row.status==='ACTIVE'?'Approved. Open your institute and sign in with the email and password used to register.':'Your application is being reviewed. Administrator access is not available yet.'});
   }
   if(action==='enter'){
-   let id='';if(b.slug!=='default'){const row=await platformOne("SELECT id FROM platform_institutes WHERE slug=? AND status='ACTIVE'",slug(b.slug));if(!row)throw new AppError('This institute is not yet active.',403);id=row.id}
+   if(b.slug==='default')throw new AppError('Choose an approved institute or sign in through Platform owner.',403);
+   const row=await platformOne("SELECT id FROM platform_institutes WHERE slug=? AND status='ACTIVE'",slug(b.slug));if(!row)throw new AppError('This institute is not yet active.',403);const id=row.id;
    const result=response({href:'/'});result.headers.append('Set-Cookie',sessionCookie('seva_institute',id,id?2592000:0));result.headers.append('Set-Cookie',sessionCookie('seva_session','',0));result.headers.append('Set-Cookie',sessionCookie('seva_owner_access','',0));return result;
   }
   if(action==='login'){
