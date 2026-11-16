@@ -5,5 +5,11 @@
   "buildCommand": "npm run vercel-build",
   "regions": [
     "bom1"
+  ],
+  "crons": [
+    {
+      "path": "/api/maintenance/backup",
+      "schedule": "0 2 * * *"
+    }
   ]
 }

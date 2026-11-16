@@ -17,6 +17,8 @@ async function main(){
  await call('enter',{slug:'default'},'',403);
  const owner=(await call('login',{email:'owner@example.test',password})).cookie;
  await call('applications',undefined,'',401);
+ await call('health',undefined,'',401);
+ await call('backup',{},'',401);
  await call('register',{},'',403,{origin:'https://attacker.example'});
  const registration=(slug)=>({slug,name:'Institute '+slug,city:'Mumbai',website:'https://college.example.test',contactName:'Coordinator',email:'coordinator@example.test',mobile:'+919876543210',password,authorized:true});
  for(const slug of ['alpha-college','beta-college'])await call('register',registration(slug),'',201);
@@ -48,6 +50,9 @@ async function main(){
  const [astate,bstate]=await Promise.all([app('state',undefined,a),app('state',undefined,b)]);
  assert.equal(astate.d.settings.institution,'Institute alpha-college');assert.equal(bstate.d.settings.institution,'Institute beta-college');
  await call('applications',undefined,a,401);
+ await call('health',undefined,a,401);
+ await call('backup',{},a,401);
+ const health=(await call('health',undefined,owner)).d;assert.equal(health.results.length,3);assert(health.results.every(r=>r.reachable&&r.integrity));assert(!JSON.stringify(health).includes('authToken'));
  await call('login',{email:'coordinator@example.test',password},a,401);
  const student={name:'Student Alpha',email:'student@example.test',role:'STUDENT',active:true,department:'Science',batch:'2026',year:1,nss_id:'A001',roll:'1',reason:'Enrollment'};
  const added=(await app('user',student,a)).d;

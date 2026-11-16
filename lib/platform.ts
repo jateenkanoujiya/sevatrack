@@ -1,3 +1,4 @@
+import {operationalHealth,runOperationalBackup} from './platform-operations';
 import {createClient} from '@libsql/client';
 import {randomUUID,randomBytes} from 'node:crypto';
 import {platformEnabled,platformDB,platformOne,platformQuery,resolveInstitute} from './platform-core';
@@ -77,6 +78,7 @@ export async function platformRequest(request:Request,action:string){
     return response({institutes:rows});
    }
    const u=await owner(request);
+   if(action==='health')return response(await operationalHealth());
    if(action==='session')return response({owner:u});
    if(action==='applications'){
     const p=new URL(request.url).searchParams,page=Math.max(1,Math.min(100000,Number(p.get('page'))||1)),q=(p.get('q')||'').slice(0,100),status=p.get('status')||'ALL';
@@ -123,6 +125,7 @@ export async function platformRequest(request:Request,action:string){
    const token=randomBytes(32).toString('hex');await platformQuery('INSERT INTO platform_sessions VALUES(?,?,?)',await digest(token),row.id,new Date(Date.now()+28800000).toISOString());const result=response({owner:{id:row.id,name:row.name,email:row.email}});result.headers.append('Set-Cookie',sessionCookie('seva_platform_session',token));return result;
   }
   const u=await owner(request);await limit('owner:'+u.id,100);
+  if(action==='backup')return response(await runOperationalBackup(u.id));
   if(action==='logout'){await platformQuery('DELETE FROM platform_sessions WHERE id=?',await digest(cookie(request,'seva_platform_session')||''));const result=response({message:'Signed out.'});result.headers.append('Set-Cookie',sessionCookie('seva_platform_session','',0));result.headers.append('Set-Cookie',sessionCookie('seva_owner_access','',0));return result}
   if(action==='manage'){
    const reason=text(b.reason,'workspace access reason',1000);

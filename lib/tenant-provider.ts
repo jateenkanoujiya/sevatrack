@@ -26,8 +26,26 @@ export async function createInstituteDatabase(id:string){
  if(!response.ok)throw new AppError('Database provider could not create the institute database. Check credentials, group and plan limits, then retry.',503);
  const data=await response.json(),host=data.database?.Hostname||data.database?.hostname;
  const url='libsql://'+host;databaseHost(url);
+ const protection=await send(base+'/'+name+'/configuration',{method:'PATCH',body:JSON.stringify({delete_protection:true})});
+ if(!protection.ok)throw new AppError('Database created, but deletion protection could not be enabled. Check provider permissions and retry.',503);
  const token=await send(base+'/'+name+'/auth/tokens?authorization=full-access&expiration=never',{method:'POST'});
  if(!token.ok)throw new AppError('Database created, but its access token could not be issued. Check provider permissions and retry.',503);
  const {jwt}=await token.json();if(typeof jwt!=='string'||!jwt)throw new AppError('The database provider returned an invalid token.',503);
  return {url,authToken:jwt};
+}
+
+// Only protects resources in the configured institute organization. Never deletes or resets data.
+export async function protectInstituteDatabases(){
+ if(!automaticProvisioningReady())return {ok:false};
+ const org=encodeURIComponent(process.env.SEVATRACK_TURSO_ORGANIZATION!.trim());
+ const base='https://api.turso.tech/v1/organizations/'+org;
+ const headers={Authorization:'Bearer '+process.env.SEVATRACK_TURSO_API_TOKEN!.trim(),'Content-Type':'application/json'};
+ try{
+  const group=encodeURIComponent(process.env.SEVATRACK_TURSO_GROUP!.trim());
+  const response=await fetch(base+'/groups/'+group+'/configuration',{method:'PATCH',headers,body:JSON.stringify({delete_protection:true}),signal:AbortSignal.timeout(20000),redirect:'error'});
+  if(!response.ok)return {ok:false};
+  const check=await fetch(base+'/groups/'+group+'/configuration',{headers,signal:AbortSignal.timeout(20000),redirect:'error'});
+  const config=check.ok?await check.json():null;
+  return {ok:config?.delete_protection===true||config?.configuration?.delete_protection===true};
+ }catch{return {ok:false}}
 }

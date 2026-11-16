@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "node scripts/migrate.mjs && next build",
+    "vercel-build": "node scripts/check-migrations.mjs && next build",
     "start": "next start",
     "lint": "eslint . --ignore-pattern .next",
     "db:migrate": "node scripts/migrate.mjs",
@@ -18,7 +18,8 @@
     "db:backup": "node scripts/backup-database.mjs",
     "backup:full": "node scripts/backup-with-photos.mjs",
     "backup:verify": "node scripts/verify-backup.mjs",
-    "backup:restore-photos": "node scripts/restore-photos.mjs"
+    "backup:restore-photos": "node scripts/restore-photos.mjs",
+    "backup:download": "node scripts/download-operational-backup.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
