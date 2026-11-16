@@ -14,6 +14,7 @@ async function main(){
  const master=createClient({url:process.env.TURSO_DATABASE_URL,authToken:'test'}),{platformRequest}=load('lib/platform.ts'),api=load('app/api/[...path]/route.ts');let checks=0;
  async function call(action,b,cookie='',expected=200,headers={}){const r=new Request('https://seva.example.test/api/platform/'+action,{method:b===undefined?'GET':'POST',headers:{origin:'https://seva.example.test',cookie,...headers},body:b===undefined?undefined:JSON.stringify(b)});const response=await platformRequest(r,action.split('?')[0]);const d=await response.json();assert.equal(response.status,expected,action+': '+JSON.stringify(d));checks++;return {d,cookie:response.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ')}}
  async function app(action,b,cookie='',expected=200,headers={}){const r=new Request('https://seva.example.test/api/'+action,{method:b===undefined?'GET':'POST',headers:{origin:'https://seva.example.test',cookie,...headers},body:b===undefined?undefined:JSON.stringify(b)});const response=await api[b===undefined?'GET':'POST'](r),d=await response.json();assert.equal(response.status,expected,action+': '+JSON.stringify(d));checks++;return {d,cookie:response.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ')}}
+ await call('enter',{slug:'default'},'',403);
  const owner=(await call('login',{email:'owner@example.test',password})).cookie;
  await call('applications',undefined,'',401);
  await call('register',{},'',403,{origin:'https://attacker.example'});
