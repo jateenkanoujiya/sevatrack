@@ -21,6 +21,7 @@ export async function withCollegeRequest(request:Request,handler:()=>Promise<Res
   const entries=collegeConfigs();
   if(!entries.length){
    const selected=request.headers.get('cookie')?.split(';').map(x=>x.trim()).find(x=>x.startsWith('seva_institute='))?.slice('seva_institute='.length);
+   if(platformEnabled()&&!selected)throw new AppError('Choose an approved institute from the institute portal.',421);
    if(selected&&!platformEnabled())throw new AppError('The institute portal is unavailable. Choose your workspace again.',503);
    college=selected?await resolveInstitute(selected):currentCollege();
    const expected=request.headers.get('x-seva-institute');

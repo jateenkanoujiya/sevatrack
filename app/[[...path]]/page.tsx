@@ -4,11 +4,11 @@ import SevaApp from '../seva-app';
 
 export const dynamic='force-dynamic';
 export default async function Page(){
- // Keep host-based installations and explicitly selected workspaces working.
+ // Keep host-based installations and selected institute workspaces working.
  // Cookies select the UI only; API handlers still validate tenant and owner access.
  if(process.env.SEVATRACK_PLATFORM_ENABLED==='1'&&!process.env.SEVATRACK_COLLEGES){
   const jar=await cookies();
-  if(!jar.get('seva_institute')?.value&&!jar.get('seva_owner_access')?.value){
+  if(!jar.get('seva_institute')?.value){
    redirect('/institutes');
   }
  }

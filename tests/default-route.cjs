@@ -18,8 +18,9 @@ async function route(env,values={}){
  await assert.rejects(route(enabled),/redirect:\/institutes/);
  await assert.rejects(route(enabled,{seva_institute:'',seva_session:'legacy-session'}),/redirect:\/institutes/);
  assert.equal(await route(enabled,{seva_institute:'selected-institute'}),'workspace');
- assert.equal(await route(enabled,{seva_owner_access:'owner-grant'}),'workspace');
+ await assert.rejects(route(enabled,{seva_owner_access:'old-owner-grant'}),/redirect:\/institutes/);
+ assert.equal(await route(enabled,{seva_institute:'selected-institute',seva_owner_access:'owner-grant'}),'workspace');
  assert.equal(await route({}),'workspace');
  assert.equal(await route({...enabled,SEVATRACK_COLLEGES:'configured'}),'workspace');
- console.log('Default route: 6 cases passed');
+ console.log('Default route: 7 cases passed');
 })().catch(e=>{console.error(e);process.exitCode=1});

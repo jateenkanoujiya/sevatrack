@@ -32,7 +32,7 @@ async function approve(actor:any,b:any){
   else{
    connection=b.databaseUrl?{url:text(b.databaseUrl,'database URL',500),authToken:text(b.databaseToken,'database access token',5000)}:await createInstituteDatabase(row.id);
    const host=databaseHost(connection.url),primary=new URL(process.env.TURSO_DATABASE_URL!).host;
-   if(host===primary||connection.url===process.env.TURSO_DATABASE_URL)throw new AppError('The existing college database cannot be reused for a new institute.');
+   if(host===primary||connection.url===process.env.TURSO_DATABASE_URL)throw new AppError('The platform database cannot be reused for an institute.');
    if(await platformOne('SELECT id FROM platform_institutes WHERE database_host=? AND id!=?',host,row.id))throw new AppError('This database is already assigned to another institute.');
    const candidate=createClient(connection);try{await claimTenantDatabase(candidate,row)}finally{candidate.close()}
    const saved=await platformQuery('UPDATE platform_institutes SET credentials=?,database_host=? WHERE id=? AND lease=?',sealTenant(row.id,connection),host,row.id,lease);
@@ -55,7 +55,7 @@ async function approve(actor:any,b:any){
   ],'write');
   return {message:'Institute approved. Its separate database and administrator account are ready.',institute:row.slug};
  }catch(error){
-  const message=error instanceof AppError?error.message:'Institute setup did not finish. Check database connectivity and use Retry setup. Existing college data was not changed.';
+  const message=error instanceof AppError?error.message:'Institute setup did not finish. Check database connectivity and use Retry setup. Platform data was not changed.';
   await platformDB().batch([{sql:"UPDATE platform_institutes SET status='SETUP_FAILED',failure_message=?,updated_at=?,lease=NULL,lease_until=NULL WHERE id=? AND lease=?",args:[message,now(),row.id,lease]},audit(actor.id,row.id,'Institute setup failed',message)],'write');
   throw new AppError(message,error instanceof AppError?error.status:503);
  }
@@ -68,7 +68,7 @@ export async function platformRequest(request:Request,action:string){
    if(action==='config')return response({enabled:true});
    if(action==='current'){
     const selected=cookie(request,'seva_institute');
-    if(!selected)return response({id:'default',name:'Existing college workspace'});
+    if(!selected)return response({id:null,name:'Choose an approved institute'});
     const c=await resolveInstitute(selected);return response({id:c.id,name:c.name});
    }
    if(action==='directory'){
@@ -125,19 +125,20 @@ export async function platformRequest(request:Request,action:string){
   const u=await owner(request);await limit('owner:'+u.id,100);
   if(action==='logout'){await platformQuery('DELETE FROM platform_sessions WHERE id=?',await digest(cookie(request,'seva_platform_session')||''));const result=response({message:'Signed out.'});result.headers.append('Set-Cookie',sessionCookie('seva_platform_session','',0));result.headers.append('Set-Cookie',sessionCookie('seva_owner_access','',0));return result}
   if(action==='manage'){
-   const reason=text(b.reason,'workspace access reason',1000),isDefault=b.id==='default';
-   const institute=isDefault?null:await platformOne("SELECT * FROM platform_institutes WHERE id=? AND status='ACTIVE'",text(b.id,'institute ID',64));
-   if(!isDefault&&!institute)throw new AppError('Activate this institute before opening its workspace.',403);
-   const connection=isDefault?{url:process.env.TURSO_DATABASE_URL!,authToken:process.env.TURSO_AUTH_TOKEN!}:openTenant(institute.id,institute.credentials);
-   const client=createClient(connection),proxyId=isDefault?u.id:'platform-owner-'+u.id;
+   const reason=text(b.reason,'workspace access reason',1000);
+   if(b.id==='default')throw new AppError('Choose an approved institute workspace.',403);
+   const institute=await platformOne("SELECT * FROM platform_institutes WHERE id=? AND status='ACTIVE'",text(b.id,'institute ID',64));
+   if(!institute)throw new AppError('Activate this institute before opening its workspace.',403);
+   const connection=openTenant(institute.id,institute.credentials);
+   const client=createClient(connection),proxyId='platform-owner-'+u.id;
    try{
-    if(!isDefault)await client.execute({sql:"INSERT INTO users(id,email,name,role,active,department,batch,year,roll,password,owner_proxy,created_at) VALUES(?,?,?,'SUPER_ADMIN',1,'Platform','',0,'',?,1,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,active=1",args:[proxyId,'platform-owner-'+u.id+'@owner.invalid','Platform owner · '+u.name,'owner-only:'+randomBytes(32).toString('hex'),now()]});
-    await client.execute({sql:'INSERT INTO audit_logs(id,actor,role,action,entity,entity_id,old_value,new_value,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',args:[randomUUID(),proxyId,'OWNER','Owner workspace opened','institute',isDefault?'default':institute.id,'null','{}',reason,now()]});
+    await client.execute({sql:"INSERT INTO users(id,email,name,role,active,department,batch,year,roll,password,owner_proxy,created_at) VALUES(?,?,?,'SUPER_ADMIN',1,'Platform','',0,'',?,1,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,active=1",args:[proxyId,'platform-owner-'+u.id+'@owner.invalid','Platform owner · '+u.name,'owner-only:'+randomBytes(32).toString('hex'),now()]});
+    await client.execute({sql:'INSERT INTO audit_logs(id,actor,role,action,entity,entity_id,old_value,new_value,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',args:[randomUUID(),proxyId,'OWNER','Owner workspace opened','institute',institute.id,'null','{}',reason,now()]});
    }finally{client.close()}
    const token=randomBytes(32).toString('hex'),session=await digest(cookie(request,'seva_platform_session')!);
    await platformDB().batch([
     {sql:'DELETE FROM platform_workspace_access WHERE session_id=? OR expires<?',args:[session,now()]},
-    {sql:'INSERT INTO platform_workspace_access VALUES(?,?,?,?,?)',args:[await digest(token),session,isDefault?'default':'institute-'+institute.id,proxyId,new Date(Date.now()+14400000).toISOString()]},
+    {sql:'INSERT INTO platform_workspace_access VALUES(?,?,?,?,?)',args:[await digest(token),session,'institute-'+institute.id,proxyId,new Date(Date.now()+14400000).toISOString()]},
     audit(u.id,institute?.id||null,'Owner workspace opened',reason)
    ],'write');
    const result=response({href:'/'});result.headers.append('Set-Cookie',sessionCookie('seva_owner_access',token,14400));result.headers.append('Set-Cookie',sessionCookie('seva_institute',institute?.id||'',institute?2592000:0));result.headers.append('Set-Cookie',sessionCookie('seva_session','',0));return result;

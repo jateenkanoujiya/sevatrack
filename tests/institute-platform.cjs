@@ -115,17 +115,14 @@ async function main(){
  await call('resume',{id:alpha.id,reason:'Review completed'},owner);
  await app('state',undefined,a,401);
  assert.equal((await app('state',undefined,b)).d.students.length,0);
- // Existing owner cannot be replaced, removed or recovered by another legacy admin.
- const mainLogin=(await app('auth',{action:'login',email:'owner@example.test',password})).cookie;
- const other=(await app('user',{name:'Other admin',email:'other@example.test',role:'ADMIN',department:'NSS',active:true,reason:'Staff'},mainLogin)).d;
- const recovery=(await app('recovery',{user:other.id},mainLogin)).d;
- await app('auth',{action:'reset',token:recovery.token,password});
- const otherLogin=(await app('auth',{action:'login',email:'other@example.test',password})).cookie;
- await call('login',{email:'other@example.test',password},otherLogin,401);
+ // Platform control database cannot be entered through legacy UI, API or stale grants.
+ await call('manage',{id:'default',reason:'Attempt legacy workspace'},owner,403);
+ assert.equal((await call('current')).d.id,null);
+ await app('auth',{action:'login',email:'owner@example.test',password},'',421);
+ await app('state',undefined,owner+'; seva_owner_access=old-grant; seva_session=old-session',421);
+ assert.equal((await call('session',undefined,owner)).d.owner.email,'owner@example.test');
  const ownerID=(await master.execute('SELECT user_id FROM platform_owner')).rows[0].user_id;
- await app('user',{id:ownerID,role:'ADMIN',name:'Hijack',email:'hijack@example.test',active:true,department:'NSS',reason:'Attempt'},otherLogin,403);
- await app('recovery',{user:ownerID},otherLogin,403);
- await app('delete-account',{id:ownerID,email:'owner@example.test',password,reason:'Attempt'},otherLogin,403);
+ assert.equal((await master.execute({sql:'SELECT active FROM users WHERE id=?',args:[ownerID]})).rows[0].active,1);
  // Credentials are encrypted and bound to their institute ID.
  const stored=(await master.execute({sql:'SELECT credentials FROM platform_institutes WHERE id=?',args:[alpha.id]})).rows[0].credentials;
  assert(!stored.includes(aurl));const {openTenant}=require('../lib/tenant-secrets.mjs');assert.throws(()=>openTenant(beta.id,stored));
